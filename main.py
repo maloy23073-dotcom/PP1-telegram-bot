@@ -9,8 +9,8 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from aiohttp import ClientSession
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo, Update
 from telegram.ext import (
-    Application, CommandHandler, MessageHandler, filters,
-    ContextTypes, ConversationHandler
+    Updater, CommandHandler, MessageHandler, Filters,
+    ConversationHandler, CallbackContext
 )
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -152,7 +152,7 @@ async def end_call_job(call_id, app):
 
 
 # Обработчики команд бота
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def start(update: Update, context: CallbackContext):
     kb = [
         [InlineKeyboardButton("Создать звонок", callback_data="create")],
         [InlineKeyboardButton("Посмотреть созданные", callback_data="list")],
@@ -163,7 +163,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(kb))
 
 
-async def create_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def create_start(update: Update, context: CallbackContext):
     await update.message.reply_text(
         "Укажите время начала звонка в формате `YYYY-MM-DD HH:MM` или `DD.MM.YYYY HH:MM` или просто `HH:MM` (Europe/Vilnius).",
         parse_mode="Markdown")
@@ -188,7 +188,7 @@ def parse_time(text: str):
     return None
 
 
-async def create_time_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def create_time_received(update: Update, context: CallbackContext):
     text = update.message.text
     dt = parse_time(text)
     if not dt:
@@ -202,7 +202,7 @@ async def create_time_received(update: Update, context: ContextTypes.DEFAULT_TYP
     return ASK_DURATION
 
 
-async def create_duration_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def create_duration_received(update: Update, context: CallbackContext):
     text = update.message.text.strip()
     try:
         minutes = int(text)
@@ -238,7 +238,7 @@ async def create_duration_received(update: Update, context: ContextTypes.DEFAULT
     return ConversationHandler.END
 
 
-async def list_calls(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def list_calls(update: Update, context: CallbackContext):
     rows = get_user_calls(update.message.from_user.id)
     if not rows:
         await update.message.reply_text("У вас нет созданных звонков.")
@@ -252,7 +252,7 @@ async def list_calls(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(out)
 
 
-async def delete_call(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def delete_call(update: Update, context: CallbackContext):
     parts = update.message.text.split()
     if len(parts) < 2:
         await update.message.reply_text("Использование: /delete <6-значный код>")
@@ -287,7 +287,7 @@ async def delete_call(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Не удалось удалить звонок. Попробуйте позже.")
 
 
-async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def cancel(update: Update, context: CallbackContext):
     await update.message.reply_text("Отмена.")
     return ConversationHandler.END
 
@@ -446,7 +446,7 @@ async def on_startup():
         scheduler.start()
 
         # Создаем приложение бота
-        bot_app = Application.builder().token(BOT_TOKEN).build()
+        bot_app = Updater(BOT_TOKEN, use_context=True)
 
         # Добавляем обработчики
         conv = ConversationHandler(
@@ -469,7 +469,7 @@ async def on_startup():
         webhook_url = f"{WEBAPP_URL}/webhook"
         logger.info(f"Setting webhook to: {webhook_url}")
 
-        await bot_app.bot.set_webhook(webhook_url)
+        bot_app.bot.set_webhook(webhook_url)
         logger.info("✅ Webhook set successfully")
 
         # Проверяем информацию о вебхуке

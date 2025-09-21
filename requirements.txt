@@ -1,6 +1,6 @@
 ﻿fastapi==0.104.1
 uvicorn[standard]==0.24.0
-python-telegram-bot==20.7
+python-telegram-bot==13.15
 apscheduler==3.10.4
 aiohttp==3.9.3
 python-dotenv==1.0.0
