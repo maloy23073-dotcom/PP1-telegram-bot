@@ -49,17 +49,6 @@ bot_app = None
 # rooms: code -> {"participants": {peer_id: websocket}, "lock": asyncio.Lock()}
 rooms = {}
 
-# In-memory storage вместо БД
-calls_storage = {}
-
-# Глобальные переменные
-scheduler = AsyncIOScheduler()
-http_session = None
-bot_app = None
-
-# rooms: code -> {"participants": {peer_id: websocket}, "lock": asyncio.Lock()}
-rooms = {}
-
 
 # Генерация кода
 def gen_code():
@@ -433,4 +422,81 @@ async def webhook(request: Request):
         return {"status": "error", "message": str(e)}
 
 
+# Инициализация при запуске
+@app.on_event("startup")
+async def on_startup():
+    global http_session, bot_app
 
+    logger.info("=== Starting Bot Application ===")
+
+    # Проверяем обязательные переменные окружения
+    if not BOT_TOKEN:
+        logger.error("❌ BOT_TOKEN environment variable is not set")
+        return
+
+    if not WEBAPP_URL:
+        logger.error("❌ WEBAPP_URL environment variable is not set")
+        return
+
+    logger.info(f"BOT_TOKEN: {'SET' if BOT_TOKEN else 'MISSING'}")
+    logger.info(f"WEBAPP_URL: {WEBAPP_URL}")
+
+    try:
+        http_session = ClientSession()
+        scheduler.start()
+
+        # Создаем приложение бота
+        bot_app = Application.builder().token(BOT_TOKEN).build()
+
+        # Добавляем обработчики
+        conv = ConversationHandler(
+            entry_points=[CommandHandler("create", create_start)],
+            states={
+                ASK_TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, create_time_received)],
+                ASK_DURATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, create_duration_received)]
+            },
+            fallbacks=[CommandHandler("cancel", cancel)]
+        )
+
+        bot_app.add_handler(CommandHandler("start", start))
+        bot_app.add_handler(conv)
+        bot_app.add_handler(CommandHandler("list", list_calls))
+        bot_app.add_handler(CommandHandler("delete", delete_call))
+
+        logger.info("✅ Bot application created successfully")
+
+        # Установка вебхука
+        webhook_url = f"{WEBAPP_URL}/webhook"
+        logger.info(f"Setting webhook to: {webhook_url}")
+
+        await bot_app.bot.set_webhook(webhook_url)
+        logger.info("✅ Webhook set successfully")
+
+        # Проверяем информацию о вебхуке
+        webhook_info = await bot_app.bot.get_webhook_info()
+        logger.info(f"Webhook info: {webhook_info}")
+
+    except Exception as e:
+        logger.error(f"❌ Failed to create bot application: {e}")
+        bot_app = None
+
+
+@app.on_event("shutdown")
+async def on_shutdown():
+    if bot_app:
+        try:
+            await bot_app.bot.delete_webhook()
+            await bot_app.shutdown()
+        except Exception as e:
+            logger.error(f"Error during bot shutdown: {e}")
+
+    scheduler.shutdown()
+
+    if http_session:
+        await http_session.close()
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run(app, host="0.0.0.0", port=PORT)
