@@ -4,93 +4,20 @@ import logging
 import asyncio
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
+from contextlib import asynccontextmanager
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from aiohttp import ClientSession
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo, Update
 from telegram.ext import (
-    ApplicationBuilder, CommandHandler, MessageHandler, filters,
+    Application, CommandHandler, MessageHandler, filters,
     ContextTypes, ConversationHandler
 )
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Request
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 import uvicorn
-from contextlib import asynccontextmanager
 
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Startup
-    global http_session, bot_app
-
-    # Проверяем обязательные переменные окружения
-    required_vars = ["BOT_TOKEN", "WEBAPP_URL"]
-    for var in required_vars:
-        if not os.environ.get(var):
-            logger.error(f"Missing required environment variable: {var}")
-
-    http_session = ClientSession()
-    scheduler.start()
-    bot_app = build_bot_app()
-
-    # Инициализация таблицы если БД доступна
-    if DB:
-        try:
-            cur = DB.cursor()
-            cur.execute("""
-                        CREATE TABLE IF NOT EXISTS calls
-                        (
-                            id
-                            SERIAL
-                            PRIMARY
-                            KEY,
-                            code
-                            VARCHAR
-                        (
-                            6
-                        ) UNIQUE NOT NULL,
-                            creator_id BIGINT NOT NULL,
-                            start_ts INTEGER NOT NULL,
-                            duration_min INTEGER NOT NULL,
-                            created_ts INTEGER NOT NULL,
-                            active BOOLEAN DEFAULT TRUE
-                            )
-                        """)
-            DB.commit()
-            cur.close()
-            logger.info("Database table initialized successfully")
-        except Exception as e:
-            logger.error(f"Error initializing database: {e}")
-    else:
-        logger.warning("Database not available - skipping table initialization")
-
-    # Установка вебхука
-    webhook_url = f"{WEBAPP_URL}/webhook"
-    try:
-        await bot_app.bot.set_webhook(webhook_url)
-        logger.info("Webhook set to: %s", webhook_url)
-    except Exception as e:
-        logger.error(f"Failed to set webhook: {e}")
-
-    yield
-
-    # Shutdown
-    if bot_app:
-        await bot_app.bot.delete_webhook()
-        await bot_app.shutdown()
-
-    scheduler.shutdown()
-
-    if http_session:
-        await http_session.close()
-
-    if DB:
-        DB.close()
-
-
-# Инициализация FastAPI приложения с lifespan
-app = FastAPI(lifespan=lifespan)
 # Настройка логирования
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -108,30 +35,16 @@ SIGNALING_SECRET = os.environ.get("SIGNALING_SECRET", "HordownZklord1!2")
 TZ = ZoneInfo("Europe/Vilnius")
 PORT = int(os.environ.get("PORT", 10000))
 
+# In-memory storage вместо БД
+calls_storage = {}
 
-# Инициализация базы данных - УПРОЩЕННАЯ ВЕРСИЯ
-def init_db():
-    DATABASE_URL = os.environ.get("DATABASE_URL")
-    if not DATABASE_URL:
-        logger.error("DATABASE_URL environment variable is not set")
-        return None
+# Глобальные переменные
+scheduler = AsyncIOScheduler()
+http_session = None
+bot_app = None
 
-    try:
-        # Пробуем импортировать psycopg2 только когда нужно
-        import psycopg2
-        conn = psycopg2.connect(DATABASE_URL, sslmode='require')
-        logger.info("Database connection established successfully")
-        return conn
-    except ImportError:
-        logger.warning("psycopg2 not available - using in-memory storage")
-        return None
-    except Exception as e:
-        logger.error(f"Database connection failed: {e}")
-        return None
-
-
-# Глобальное соединение с БД
-DB = init_db()
+# rooms: code -> {"participants": {peer_id: websocket}, "lock": asyncio.Lock()}
+rooms = {}
 
 
 # Генерация кода
@@ -139,146 +52,100 @@ def gen_code():
     return "{:06d}".format(random.randint(0, 999999))
 
 
-# Функции работы с БД
+# Функции работы с хранилищем
 def save_call(code, creator_id, start_ts, duration_min):
-    if not DB:
-        logger.error("Database not available")
-        return None
-
-    try:
-        cur = DB.cursor()
-        cur.execute(
-            "INSERT INTO calls (code, creator_id, start_ts, duration_min, created_ts) VALUES (%s, %s, %s, %s, %s) RETURNING id",
-            (code, creator_id, start_ts, duration_min, int(datetime.now(tz=TZ).timestamp()))
-        )
-        call_id = cur.fetchone()[0]
-        DB.commit()
-        cur.close()
-        logger.info(f"Call saved successfully: {code}")
-        return call_id
-    except Exception as e:
-        logger.error(f"Error saving call: {e}")
-        return None
+    call_id = f"{code}_{datetime.now().timestamp()}"
+    calls_storage[call_id] = {
+        'code': code,
+        'creator_id': creator_id,
+        'start_ts': start_ts,
+        'duration_min': duration_min,
+        'created_ts': int(datetime.now(tz=TZ).timestamp()),
+        'active': True
+    }
+    logger.info(f"Call saved in memory: {code}")
+    return call_id
 
 
 def get_user_calls(user_id):
-    if not DB:
-        logger.error("Database not available")
-        return []
-
-    try:
-        cur = DB.cursor()
-        cur.execute(
-            "SELECT code, start_ts, duration_min, active FROM calls WHERE creator_id = %s ORDER BY start_ts",
-            (user_id,)
-        )
-        rows = cur.fetchall()
-        cur.close()
-
-        calls = []
-        for code, start_ts, duration_min, active in rows:
-            start_dt = datetime.fromtimestamp(start_ts, tz=TZ).strftime('%Y-%m-%d %H:%M')
-            calls.append((code, start_dt, duration_min, active))
-        return calls
-    except Exception as e:
-        logger.error(f"Error getting user calls: {e}")
-        return []
+    user_calls = []
+    for call_id, call_data in calls_storage.items():
+        if call_data['creator_id'] == user_id:
+            start_dt = datetime.fromtimestamp(call_data['start_ts'], tz=TZ).strftime('%Y-%m-%d %H:%M')
+            user_calls.append((
+                call_data['code'],
+                start_dt,
+                call_data['duration_min'],
+                call_data['active']
+            ))
+    return user_calls
 
 
 def get_call_by_code(code):
-    if not DB:
-        logger.error("Database not available")
-        return None
-
-    try:
-        cur = DB.cursor()
-        cur.execute("SELECT id, code, creator_id, start_ts, duration_min, active FROM calls WHERE code = %s", (code,))
-        row = cur.fetchone()
-        cur.close()
-        return row
-    except Exception as e:
-        logger.error(f"Error getting call by code: {e}")
-        return None
+    for call_id, call_data in calls_storage.items():
+        if call_data['code'] == code:
+            return (
+                call_id,
+                call_data['code'],
+                call_data['creator_id'],
+                call_data['start_ts'],
+                call_data['duration_min'],
+                call_data['active']
+            )
+    return None
 
 
 def mark_call_inactive(call_id):
-    if not DB:
-        logger.error("Database not available")
-        return False
-
-    try:
-        cur = DB.cursor()
-        cur.execute("UPDATE calls SET active = FALSE WHERE id = %s", (call_id,))
-        DB.commit()
-        cur.close()
+    if call_id in calls_storage:
+        calls_storage[call_id]['active'] = False
         logger.info(f"Call {call_id} marked as inactive")
         return True
-    except Exception as e:
-        logger.error(f"Error marking call inactive: {e}")
-        return False
+    return False
 
 
 # Функции планировщика
 async def send_5min_warn(call_id, app):
-    if not DB:
-        logger.error("Database not available - cannot send warning")
+    call_data = calls_storage.get(call_id)
+    if not call_data or not call_data['active']:
         return
 
-    try:
-        cur = DB.cursor()
-        cur.execute("SELECT code, creator_id, start_ts FROM calls WHERE id = %s AND active = TRUE", (call_id,))
-        row = cur.fetchone()
-        cur.close()
+    code = call_data['code']
+    creator_id = call_data['creator_id']
 
-        if not row:
-            return
-
-        code, creator_id, start_ts = row
-        await app.bot.send_message(
-            chat_id=creator_id,
-            text=f"Через 5 минут начнётся ваш видеозвонок (код: {code}). Откройте мини-приложение и введите код."
-        )
-    except Exception as e:
-        logger.error(f"Error sending 5min warning: {e}")
+    await app.bot.send_message(
+        chat_id=creator_id,
+        text=f"Через 5 минут начнётся ваш видеозвонок (код: {code}). Откройте мини-приложение и введите код."
+    )
 
 
 async def end_call_job(call_id, app):
-    if not DB:
-        logger.error("Database not available - cannot end call")
+    call_data = calls_storage.get(call_id)
+    if not call_data or not call_data['active']:
         return
 
+    code = call_data['code']
+    creator_id = call_data['creator_id']
+
+    # Помечаем как неактивный
+    mark_call_inactive(call_id)
+
+    # Пытаемся закрыть комнату через API
     try:
-        cur = DB.cursor()
-        cur.execute("SELECT code, creator_id FROM calls WHERE id = %s AND active = TRUE", (call_id,))
-        row = cur.fetchone()
-        cur.close()
-
-        if not row:
-            return
-
-        code, creator_id = row
-
-        # Сначала помечаем как неактивный в БД
-        if mark_call_inactive(call_id):
-            # Затем пытаемся закрыть комнату через API
-            try:
-                async with ClientSession() as session:
-                    async with session.post(
-                            f"{WEBAPP_URL}/end_room",
-                            json={"code": code, "secret": SIGNALING_SECRET},
-                            timeout=10
-                    ) as response:
-                        if response.status != 200:
-                            logger.error(f"Failed to end room: {response.status}")
-            except Exception as e:
-                logger.error(f"Error calling signaling end_room: {e}")
-
-            await app.bot.send_message(
-                chat_id=creator_id,
-                text=f"Время звонка (код {code}) истекло — комната закрыта."
-            )
+        async with ClientSession() as session:
+            async with session.post(
+                    f"{WEBAPP_URL}/end_room",
+                    json={"code": code, "secret": SIGNALING_SECRET},
+                    timeout=10
+            ) as response:
+                if response.status != 200:
+                    logger.error(f"Failed to end room: {response.status}")
     except Exception as e:
-        logger.error(f"Error in end_call_job: {e}")
+        logger.error(f"Error calling signaling end_room: {e}")
+
+    await app.bot.send_message(
+        chat_id=creator_id,
+        text=f"Время звонка (код {code}) истекло — комната закрыта."
+    )
 
 
 # Обработчики команд бота
@@ -358,10 +225,10 @@ async def create_duration_received(update: Update, context: ContextTypes.DEFAULT
     warn_time = dt - timedelta(minutes=5)
 
     if warn_time > datetime.now(tz=TZ):
-        scheduler.add_job(send_5min_warn, "date", run_date=warn_time, args=[call_id, context.application])
+        scheduler.add_job(send_5min_warn, "date", run_date=warn_time, args=[call_id, bot_app])
 
     end_time = dt + timedelta(minutes=minutes)
-    scheduler.add_job(end_call_job, "date", run_date=end_time, args=[call_id, context.application])
+    scheduler.add_job(end_call_job, "date", run_date=end_time, args=[call_id, bot_app])
 
     await update.message.reply_text(
         f"✅ Звонок создан.\nКод: {code}\nДата: {dt.strftime('%Y-%m-%d %H:%M %Z')}\nДлительность: {minutes} мин.\nЗа 5 минут до начала вы получите уведомление.")
@@ -369,10 +236,6 @@ async def create_duration_received(update: Update, context: ContextTypes.DEFAULT
 
 
 async def list_calls(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not DB:
-        await update.message.reply_text("⚠️ База данных временно недоступна. Попробуйте позже.")
-        return
-
     rows = get_user_calls(update.message.from_user.id)
     if not rows:
         await update.message.reply_text("У вас нет созданных звонков.")
@@ -387,10 +250,6 @@ async def list_calls(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def delete_call(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not DB:
-        await update.message.reply_text("⚠️ База данных временно недоступна. Попробуйте позже.")
-        return
-
     parts = update.message.text.split()
     if len(parts) < 2:
         await update.message.reply_text("Использование: /delete <6-значный код>")
@@ -428,33 +287,6 @@ async def delete_call(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Отмена.")
     return ConversationHandler.END
-
-
-# Создание приложения бота
-def build_bot_app():
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
-    conv = ConversationHandler(
-        entry_points=[CommandHandler("create", create_start)],
-        states={
-            ASK_TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, create_time_received)],
-            ASK_DURATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, create_duration_received)]
-        },
-        fallbacks=[CommandHandler("cancel", cancel)]
-    )
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(conv)
-    app.add_handler(CommandHandler("list", list_calls))
-    app.add_handler(CommandHandler("delete", delete_call))
-    return app
-
-
-# Инициализация FastAPI приложения
-app = FastAPI()
-WEBAPP_DIR = os.environ.get("WEBAPP_DIR", "webapp")
-app.mount("/", StaticFiles(directory=WEBAPP_DIR, html=True), name="webapp")
-
-# rooms: code -> {"participants": {peer_id: websocket}, "lock": asyncio.Lock()}
-rooms = {}
 
 
 # Сигналинг функции
@@ -587,63 +419,71 @@ async def webhook(request: Request):
         return {"status": "error", "message": str(e)}
 
 
-# Инициализация глобальных переменных
-scheduler = AsyncIOScheduler()
-http_session = None
-bot_app = None
+# Lifespan management
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    global http_session, bot_app
 
     # Проверяем обязательные переменные окружения
-    required_vars = ["BOT_TOKEN", "WEBAPP_URL", "DATABASE_URL"]
-    for var in required_vars:
-        if not os.environ.get(var):
-            logger.error(f"Missing required environment variable: {var}")
+    if not BOT_TOKEN:
+        logger.error("BOT_TOKEN environment variable is not set")
+    if not WEBAPP_URL:
+        logger.error("WEBAPP_URL environment variable is not set")
 
     http_session = ClientSession()
     scheduler.start()
-    bot_app = build_bot_app()
 
-    # Инициализация таблицы если БД доступна
-    if DB:
-        try:
-            cur = DB.cursor()
-            cur.execute("""
-                        CREATE TABLE IF NOT EXISTS calls
-                        (
-                            id
-                            SERIAL
-                            PRIMARY
-                            KEY,
-                            code
-                            VARCHAR
-                        (
-                            6
-                        ) UNIQUE NOT NULL,
-                            creator_id BIGINT NOT NULL,
-                            start_ts INTEGER NOT NULL,
-                            duration_min INTEGER NOT NULL,
-                            created_ts INTEGER NOT NULL,
-                            active BOOLEAN DEFAULT TRUE
-                            )
-                        """)
-            DB.commit()
-            cur.close()
-            logger.info("Database table initialized successfully")
-        except Exception as e:
-            logger.error(f"Error initializing database: {e}")
-    else:
-        logger.warning("Database not available - skipping table initialization")
-
-    # Установка вебхука
-    webhook_url = f"{WEBAPP_URL}/webhook"
+    # Создаем приложение бота
     try:
+        bot_app = Application.builder().token(BOT_TOKEN).build()
+
+        # Добавляем обработчики
+        conv = ConversationHandler(
+            entry_points=[CommandHandler("create", create_start)],
+            states={
+                ASK_TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, create_time_received)],
+                ASK_DURATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, create_duration_received)]
+            },
+            fallbacks=[CommandHandler("cancel", cancel)]
+        )
+
+        bot_app.add_handler(CommandHandler("start", start))
+        bot_app.add_handler(conv)
+        bot_app.add_handler(CommandHandler("list", list_calls))
+        bot_app.add_handler(CommandHandler("delete", delete_call))
+
+        logger.info("Bot application created successfully")
+
+        # Установка вебхука
+        webhook_url = f"{WEBAPP_URL}/webhook"
         await bot_app.bot.set_webhook(webhook_url)
-        logger.info("Webhook set to: %s", webhook_url)
+        logger.info(f"Webhook set to: {webhook_url}")
+
     except Exception as e:
-        logger.error(f"Failed to set webhook: {e}")
+        logger.error(f"Failed to create bot application: {e}")
+        bot_app = None
+
+    yield
+
+    # Shutdown
+    if bot_app:
+        try:
+            await bot_app.bot.delete_webhook()
+            await bot_app.shutdown()
+        except Exception as e:
+            logger.error(f"Error during bot shutdown: {e}")
+
+    scheduler.shutdown()
+
+    if http_session:
+        await http_session.close()
 
 
-
-
+# Инициализация FastAPI приложения с lifespan
+app = FastAPI(lifespan=lifespan)
+WEBAPP_DIR = os.environ.get("WEBAPP_DIR", "webapp")
+app.mount("/", StaticFiles(directory=WEBAPP_DIR, html=True), name="webapp")
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=PORT)
