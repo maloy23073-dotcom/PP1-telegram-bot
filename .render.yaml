@@ -3,9 +3,7 @@ services:
     name: telegram-videobot
     env: python
     plan: free
-    buildCommand: |
-      pip install -r requirements.txt
-      python init_db.py
+    buildCommand: bash render_build.sh
     startCommand: python main.py
     envVars:
       - key: PORT

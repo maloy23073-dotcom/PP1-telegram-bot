@@ -41,10 +41,16 @@ PORT = int(os.environ.get("PORT", 10000))
 def init_db():
     DATABASE_URL = os.environ.get("DATABASE_URL")
     if not DATABASE_URL:
-        raise ValueError("DATABASE_URL environment variable is not set")
+        logger.error("DATABASE_URL environment variable is not set")
+        return None
 
-    conn = psycopg2.connect(DATABASE_URL, sslmode='require')
-    return conn
+    try:
+        conn = psycopg2.connect(DATABASE_URL, sslmode='require')
+        logger.info("Database connection established successfully")
+        return conn
+    except Exception as e:
+        logger.error(f"Database connection failed: {e}")
+        return None
 
 
 # Глобальное соединение с БД
@@ -58,90 +64,144 @@ def gen_code():
 
 # Функции работы с БД
 def save_call(code, creator_id, start_ts, duration_min):
-    cur = DB.cursor()
-    cur.execute(
-        "INSERT INTO calls (code, creator_id, start_ts, duration_min, created_ts) VALUES (%s, %s, %s, %s, %s) RETURNING id",
-        (code, creator_id, start_ts, duration_min, int(datetime.now(tz=TZ).timestamp()))
-    )
-    call_id = cur.fetchone()[0]
-    DB.commit()
-    cur.close()
-    return call_id
+    if not DB:
+        logger.error("Database not available")
+        return None
+
+    try:
+        cur = DB.cursor()
+        cur.execute(
+            "INSERT INTO calls (code, creator_id, start_ts, duration_min, created_ts) VALUES (%s, %s, %s, %s, %s) RETURNING id",
+            (code, creator_id, start_ts, duration_min, int(datetime.now(tz=TZ).timestamp()))
+        )
+        call_id = cur.fetchone()[0]
+        DB.commit()
+        cur.close()
+        logger.info(f"Call saved successfully: {code}")
+        return call_id
+    except Exception as e:
+        logger.error(f"Error saving call: {e}")
+        return None
 
 
 def get_user_calls(user_id):
-    cur = DB.cursor()
-    cur.execute(
-        "SELECT code, start_ts, duration_min, active FROM calls WHERE creator_id = %s ORDER BY start_ts",
-        (user_id,)
-    )
-    rows = cur.fetchall()
-    cur.close()
+    if not DB:
+        logger.error("Database not available")
+        return []
 
-    calls = []
-    for code, start_ts, duration_min, active in rows:
-        start_dt = datetime.fromtimestamp(start_ts, tz=TZ).strftime('%Y-%m-%d %H:%M')
-        calls.append((code, start_dt, duration_min, active))
-    return calls
+    try:
+        cur = DB.cursor()
+        cur.execute(
+            "SELECT code, start_ts, duration_min, active FROM calls WHERE creator_id = %s ORDER BY start_ts",
+            (user_id,)
+        )
+        rows = cur.fetchall()
+        cur.close()
+
+        calls = []
+        for code, start_ts, duration_min, active in rows:
+            start_dt = datetime.fromtimestamp(start_ts, tz=TZ).strftime('%Y-%m-%d %H:%M')
+            calls.append((code, start_dt, duration_min, active))
+        return calls
+    except Exception as e:
+        logger.error(f"Error getting user calls: {e}")
+        return []
 
 
 def get_call_by_code(code):
-    cur = DB.cursor()
-    cur.execute("SELECT id, code, creator_id, start_ts, duration_min, active FROM calls WHERE code = %s", (code,))
-    row = cur.fetchone()
-    cur.close()
-    return row
+    if not DB:
+        logger.error("Database not available")
+        return None
+
+    try:
+        cur = DB.cursor()
+        cur.execute("SELECT id, code, creator_id, start_ts, duration_min, active FROM calls WHERE code = %s", (code,))
+        row = cur.fetchone()
+        cur.close()
+        return row
+    except Exception as e:
+        logger.error(f"Error getting call by code: {e}")
+        return None
 
 
 def mark_call_inactive(call_id):
-    cur = DB.cursor()
-    cur.execute("UPDATE calls SET active = FALSE WHERE id = %s", (call_id,))
-    DB.commit()
-    cur.close()
+    if not DB:
+        logger.error("Database not available")
+        return False
+
+    try:
+        cur = DB.cursor()
+        cur.execute("UPDATE calls SET active = FALSE WHERE id = %s", (call_id,))
+        DB.commit()
+        cur.close()
+        logger.info(f"Call {call_id} marked as inactive")
+        return True
+    except Exception as e:
+        logger.error(f"Error marking call inactive: {e}")
+        return False
 
 
 # Функции планировщика
 async def send_5min_warn(call_id, app):
-    cur = DB.cursor()
-    cur.execute("SELECT code, creator_id, start_ts FROM calls WHERE id = %s AND active = TRUE", (call_id,))
-    row = cur.fetchone()
-    cur.close()
-
-    if not row:
+    if not DB:
+        logger.error("Database not available - cannot send warning")
         return
-    code, creator_id, start_ts = row
-    await app.bot.send_message(
-        chat_id=creator_id,
-        text=f"Через 5 минут начнётся ваш видеозвонок (код: {code}). Откройте мини-приложение и введите код."
-    )
+
+    try:
+        cur = DB.cursor()
+        cur.execute("SELECT code, creator_id, start_ts FROM calls WHERE id = %s AND active = TRUE", (call_id,))
+        row = cur.fetchone()
+        cur.close()
+
+        if not row:
+            return
+
+        code, creator_id, start_ts = row
+        await app.bot.send_message(
+            chat_id=creator_id,
+            text=f"Через 5 минут начнётся ваш видеозвонок (код: {code}). Откройте мини-приложение и введите код."
+        )
+    except Exception as e:
+        logger.error(f"Error sending 5min warning: {e}")
 
 
 async def end_call_job(call_id, app):
-    cur = DB.cursor()
-    cur.execute("SELECT code, creator_id FROM calls WHERE id = %s AND active = TRUE", (call_id,))
-    row = cur.fetchone()
-    cur.close()
-
-    if not row:
+    if not DB:
+        logger.error("Database not available - cannot end call")
         return
-    code, creator_id = row
-    mark_call_inactive(call_id)
 
     try:
-        async with ClientSession() as session:
-            async with session.post(
-                    f"{WEBAPP_URL}/end_room",
-                    json={"code": code, "secret": SIGNALING_SECRET}
-            ) as response:
-                if response.status != 200:
-                    logger.error(f"Failed to end room: {response.status}")
-    except Exception as e:
-        logger.error("Error calling signaling end_room: %s", e)
+        cur = DB.cursor()
+        cur.execute("SELECT code, creator_id FROM calls WHERE id = %s AND active = TRUE", (call_id,))
+        row = cur.fetchone()
+        cur.close()
 
-    await app.bot.send_message(
-        chat_id=creator_id,
-        text=f"Время звонка (код {code}) истекло — комната закрыта."
-    )
+        if not row:
+            return
+
+        code, creator_id = row
+
+        # Сначала помечаем как неактивный в БД
+        if mark_call_inactive(call_id):
+            # Затем пытаемся закрыть комнату через API
+            try:
+                async with ClientSession() as session:
+                    async with session.post(
+                            f"{WEBAPP_URL}/end_room",
+                            json={"code": code, "secret": SIGNALING_SECRET},
+                            timeout=10
+                    ) as response:
+                        if response.status != 200:
+                            logger.error(f"Failed to end room: {response.status}")
+            except Exception as e:
+                logger.error(f"Error calling signaling end_room: {e}")
+
+            await app.bot.send_message(
+                chat_id=creator_id,
+                text=f"Время звонка (код {code}) истекло — комната закрыта."
+            )
+    except Exception as e:
+        logger.error(f"Error in end_call_job: {e}")
 
 
 # Обработчики команд бота
@@ -214,6 +274,10 @@ async def create_duration_received(update: Update, context: ContextTypes.DEFAULT
         code = gen_code()
 
     call_id = save_call(code, creator, int(dt.timestamp()), minutes)
+    if not call_id:
+        await update.message.reply_text("❌ Не удалось создать звонок. Попробуйте позже.")
+        return ConversationHandler.END
+
     warn_time = dt - timedelta(minutes=5)
 
     if warn_time > datetime.now(tz=TZ):
@@ -223,11 +287,15 @@ async def create_duration_received(update: Update, context: ContextTypes.DEFAULT
     scheduler.add_job(end_call_job, "date", run_date=end_time, args=[call_id, context.application])
 
     await update.message.reply_text(
-        f"Звонок создан.\nКод: {code}\nДата: {dt.strftime('%Y-%m-%d %H:%M %Z')}\nДлительность: {minutes} мин.\nЗа 5 минут до начала вы получите уведомление.")
+        f"✅ Звонок создан.\nКод: {code}\nДата: {dt.strftime('%Y-%m-%d %H:%M %Z')}\nДлительность: {minutes} мин.\nЗа 5 минут до начала вы получите уведомление.")
     return ConversationHandler.END
 
 
 async def list_calls(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not DB:
+        await update.message.reply_text("⚠️ База данных временно недоступна. Попробуйте позже.")
+        return
+
     rows = get_user_calls(update.message.from_user.id)
     if not rows:
         await update.message.reply_text("У вас нет созданных звонков.")
@@ -242,6 +310,10 @@ async def list_calls(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def delete_call(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not DB:
+        await update.message.reply_text("⚠️ База данных временно недоступна. Попробуйте позже.")
+        return
+
     parts = update.message.text.split()
     if len(parts) < 2:
         await update.message.reply_text("Использование: /delete <6-значный код>")
@@ -258,20 +330,22 @@ async def delete_call(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Вы не являетесь создателем этого звонка.")
         return
 
-    mark_call_inactive(cid)
+    if mark_call_inactive(cid):
+        try:
+            async with ClientSession() as session:
+                async with session.post(
+                        f"{WEBAPP_URL}/end_room",
+                        json={"code": code, "secret": SIGNALING_SECRET},
+                        timeout=10
+                ) as response:
+                    if response.status != 200:
+                        logger.error(f"Failed to end room: {response.status}")
+        except Exception as e:
+            logger.error(f"end_room error: {e}")
 
-    try:
-        async with ClientSession() as session:
-            async with session.post(
-                    f"{WEBAPP_URL}/end_room",
-                    json={"code": code, "secret": SIGNALING_SECRET}
-            ) as response:
-                if response.status != 200:
-                    logger.error(f"Failed to end room: {response.status}")
-    except Exception as e:
-        logger.error("end_room error: %s", e)
-
-    await update.message.reply_text(f"Звонок {code} удалён/закрыт.")
+        await update.message.reply_text(f"✅ Звонок {code} удалён/закрыт.")
+    else:
+        await update.message.reply_text("❌ Не удалось удалить звонок. Попробуйте позже.")
 
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -452,44 +526,49 @@ async def on_startup():
     for var in required_vars:
         if not os.environ.get(var):
             logger.error(f"Missing required environment variable: {var}")
-            raise ValueError(f"Missing required environment variable: {var}")
 
     http_session = ClientSession()
     scheduler.start()
     bot_app = build_bot_app()
 
+    # Инициализация таблицы если БД доступна
+    if DB:
+        try:
+            cur = DB.cursor()
+            cur.execute("""
+                        CREATE TABLE IF NOT EXISTS calls
+                        (
+                            id
+                            SERIAL
+                            PRIMARY
+                            KEY,
+                            code
+                            VARCHAR
+                        (
+                            6
+                        ) UNIQUE NOT NULL,
+                            creator_id BIGINT NOT NULL,
+                            start_ts INTEGER NOT NULL,
+                            duration_min INTEGER NOT NULL,
+                            created_ts INTEGER NOT NULL,
+                            active BOOLEAN DEFAULT TRUE
+                            )
+                        """)
+            DB.commit()
+            cur.close()
+            logger.info("Database table initialized successfully")
+        except Exception as e:
+            logger.error(f"Error initializing database: {e}")
+    else:
+        logger.warning("Database not available - skipping table initialization")
+
     # Установка вебхука
     webhook_url = f"{WEBAPP_URL}/webhook"
-    await bot_app.bot.set_webhook(webhook_url)
-    logger.info("Webhook set to: %s", webhook_url)
-
-    # Инициализация таблицы если не существует
     try:
-        cur = DB.cursor()
-        cur.execute("""
-                    CREATE TABLE IF NOT EXISTS calls
-                    (
-                        id
-                        SERIAL
-                        PRIMARY
-                        KEY,
-                        code
-                        VARCHAR
-                    (
-                        6
-                    ) UNIQUE NOT NULL,
-                        creator_id BIGINT NOT NULL,
-                        start_ts INTEGER NOT NULL,
-                        duration_min INTEGER NOT NULL,
-                        created_ts INTEGER NOT NULL,
-                        active BOOLEAN DEFAULT TRUE
-                        )
-                    """)
-        DB.commit()
-        cur.close()
-        logger.info("Database table initialized successfully")
+        await bot_app.bot.set_webhook(webhook_url)
+        logger.info("Webhook set to: %s", webhook_url)
     except Exception as e:
-        logger.error(f"Error initializing database: {e}")
+        logger.error(f"Failed to set webhook: {e}")
 
 
 @app.on_event("shutdown")
