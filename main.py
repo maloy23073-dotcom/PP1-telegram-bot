@@ -1,6 +1,4 @@
 import os
-import psycopg2
-from psycopg2.extras import RealDictCursor
 import random
 import logging
 import asyncio
@@ -37,7 +35,7 @@ TZ = ZoneInfo("Europe/Vilnius")
 PORT = int(os.environ.get("PORT", 10000))
 
 
-# Инициализация базы данных
+# Инициализация базы данных - УПРОЩЕННАЯ ВЕРСИЯ
 def init_db():
     DATABASE_URL = os.environ.get("DATABASE_URL")
     if not DATABASE_URL:
@@ -45,9 +43,14 @@ def init_db():
         return None
 
     try:
+        # Пробуем импортировать psycopg2 только когда нужно
+        import psycopg2
         conn = psycopg2.connect(DATABASE_URL, sslmode='require')
         logger.info("Database connection established successfully")
         return conn
+    except ImportError:
+        logger.warning("psycopg2 not available - using in-memory storage")
+        return None
     except Exception as e:
         logger.error(f"Database connection failed: {e}")
         return None
