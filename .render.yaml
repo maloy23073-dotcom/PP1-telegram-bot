@@ -14,5 +14,3 @@ services:
         fromSecret: WEBAPP_URL
       - key: SIGNALING_SECRET
         fromSecret: SIGNALING_SECRET
-      - key: DATABASE_URL
-        fromSecret: DATABASE_URL

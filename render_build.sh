@@ -1,11 +1,17 @@
 #!/bin/bash
 echo "=== Starting Build Process ==="
+echo "Current directory: $(pwd)"
+echo "Files: $(ls -la)"
 
-echo "1. Updating pip..."
-python -m pip install --upgrade pip
-
-echo "2. Installing dependencies..."
+echo "Installing dependencies..."
 pip install -r requirements.txt
 
-echo "3. Build completed successfully!"
-echo "=== Ready to start server ==="
+echo "Checking WebApp directory..."
+if [ -d "webapp" ]; then
+    echo "WebApp directory exists: $(ls -la webapp/)"
+else
+    echo "ERROR: WebApp directory not found!"
+    exit 1
+fi
+
+echo "Build completed!"

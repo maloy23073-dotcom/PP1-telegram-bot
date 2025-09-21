@@ -1,4 +1,5 @@
 import os
+import sys
 import random
 import logging
 import asyncio
@@ -16,7 +17,18 @@ from telegram.ext import (
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Request
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
-import uvicorn
+print("=== Starting Application ===")
+print(f"Python version: {sys.version}")
+print(f"Current directory: {os.getcwd()}")
+print(f"Files in directory: {os.listdir('.')}")
+
+# Проверяем обязательные переменные
+required_vars = ["BOT_TOKEN", "WEBAPP_URL"]
+for var in required_vars:
+    value = os.environ.get(var)
+    print(f"{var}: {'SET' if value else 'MISSING'}")
+    if not value:
+        print(f"ERROR: {var} is required!")
 
 # Настройка логирования
 logging.basicConfig(
@@ -29,7 +41,13 @@ logger = logging.getLogger(__name__)
 app = FastAPI()
 WEBAPP_DIR = os.environ.get("WEBAPP_DIR", "webapp")
 app.mount("/", StaticFiles(directory=WEBAPP_DIR, html=True), name="webapp")
-# Lifespan management
+WEBAPP_DIR = os.environ.get("WEBAPP_DIR", "webapp")
+print(f"WebApp directory: {WEBAPP_DIR}")
+if not os.path.exists(WEBAPP_DIR):
+    print(f"ERROR: WebApp directory '{WEBAPP_DIR}' does not exist!")
+else:
+    print(f"WebApp files: {os.listdir(WEBAPP_DIR)}")
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
