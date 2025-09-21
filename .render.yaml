@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: telegram-videobot
+    env: python
+    plan: free
+    buildCommand: |
+      pip install -r requirements.txt
+      python init_db.py
+    startCommand: python main.py
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: BOT_TOKEN
+        fromSecret: BOT_TOKEN
+      - key: WEBAPP_URL
+        fromSecret: WEBAPP_URL
+      - key: SIGNALING_SECRET
+        fromSecret: SIGNALING_SECRET
+      - key: DATABASE_URL
+        fromSecret: DATABASE_URL
