@@ -39,6 +39,31 @@ SIGNALING_SECRET = os.environ.get("SIGNALING_SECRET", "HordownZklord1!2")
 TZ = ZoneInfo("Europe/Vilnius")
 PORT = int(os.environ.get("PORT", 10000))
 
+
+@app.get("/check-bot")
+async def check_bot():
+    if not bot_app:
+        return {"status": "error", "message": "Bot not initialized"}
+
+    try:
+        # Проверяем информацию о боте
+        bot_info = await bot_app.bot.get_me()
+        webhook_info = await bot_app.bot.get_webhook_info()
+
+        return {
+            "status": "success",
+            "bot_info": {
+                "id": bot_info.id,
+                "username": bot_info.username,
+                "first_name": bot_info.first_name
+            },
+            "webhook_info": {
+                "url": webhook_info.url,
+                "pending_updates": webhook_info.pending_update_count
+            }
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 # In-memory storage вместо БД
 calls_storage = {}
 
@@ -415,8 +440,17 @@ async def ping():
 async def webhook(request: Request):
     try:
         data = await request.json()
+        logger.info(f"Received update: {data}")
+
+        if not bot_app:
+            logger.error("Bot application not initialized")
+            return {"status": "error", "message": "Bot not initialized"}
+
         update = Update.de_json(data, bot_app.bot)
-        await bot_app.update_queue.put(update)
+
+        # Обрабатываем обновление через диспетчер
+        await bot_app.process_update(update)
+
         return {"status": "ok"}
     except Exception as e:
         logger.error(f"Error processing update: {e}")
@@ -470,15 +504,21 @@ async def on_startup():
         webhook_url = f"{WEBAPP_URL}/webhook"
         logger.info(f"Setting webhook to: {webhook_url}")
 
-        bot_app.bot.set_webhook(webhook_url)
+        await bot_app.bot.set_webhook(webhook_url)
         logger.info("✅ Webhook set successfully")
 
         # Проверяем информацию о вебхуке
         webhook_info = await bot_app.bot.get_webhook_info()
         logger.info(f"Webhook info: {webhook_info}")
 
+        # Проверяем информацию о боте
+        bot_info = await bot_app.bot.get_me()
+        logger.info(f"Bot info: {bot_info}")
+
     except Exception as e:
         logger.error(f"❌ Failed to create bot application: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
         bot_app = None
 
 
