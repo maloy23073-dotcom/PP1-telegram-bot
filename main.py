@@ -25,6 +25,71 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Инициализация FastAPI приложения
+app = FastAPI()
+WEBAPP_DIR = os.environ.get("WEBAPP_DIR", "webapp")
+app.mount("/", StaticFiles(directory=WEBAPP_DIR, html=True), name="webapp")
+# Lifespan management
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    global http_session, bot_app
+
+    # Проверяем обязательные переменные окружения
+    if not BOT_TOKEN:
+        logger.error("BOT_TOKEN environment variable is not set")
+    if not WEBAPP_URL:
+        logger.error("WEBAPP_URL environment variable is not set")
+
+    http_session = ClientSession()
+    scheduler.start()
+
+    # Создаем приложение бота
+    try:
+        bot_app = Application.builder().token(BOT_TOKEN).build()
+
+        # Добавляем обработчики
+        conv = ConversationHandler(
+            entry_points=[CommandHandler("create", create_start)],
+            states={
+                ASK_TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, create_time_received)],
+                ASK_DURATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, create_duration_received)]
+            },
+            fallbacks=[CommandHandler("cancel", cancel)]
+        )
+
+        bot_app.add_handler(CommandHandler("start", start))
+        bot_app.add_handler(conv)
+        bot_app.add_handler(CommandHandler("list", list_calls))
+        bot_app.add_handler(CommandHandler("delete", delete_call))
+
+        logger.info("Bot application created successfully")
+
+        # Установка вебхука
+        webhook_url = f"{WEBAPP_URL}/webhook"
+        await bot_app.bot.set_webhook(webhook_url)
+        logger.info(f"Webhook set to: {webhook_url}")
+
+    except Exception as e:
+        logger.error(f"Failed to create bot application: {e}")
+        bot_app = None
+
+    yield
+
+    # Shutdown
+    if bot_app:
+        try:
+            await bot_app.bot.delete_webhook()
+            await bot_app.shutdown()
+        except Exception as e:
+            logger.error(f"Error during bot shutdown: {e}")
+
+    scheduler.shutdown()
+
+    if http_session:
+        await http_session.close()
+
+
 # States for ConversationHandler
 ASK_TIME, ASK_DURATION = range(2)
 
@@ -419,71 +484,4 @@ async def webhook(request: Request):
         return {"status": "error", "message": str(e)}
 
 
-# Lifespan management
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Startup
-    global http_session, bot_app
 
-    # Проверяем обязательные переменные окружения
-    if not BOT_TOKEN:
-        logger.error("BOT_TOKEN environment variable is not set")
-    if not WEBAPP_URL:
-        logger.error("WEBAPP_URL environment variable is not set")
-
-    http_session = ClientSession()
-    scheduler.start()
-
-    # Создаем приложение бота
-    try:
-        bot_app = Application.builder().token(BOT_TOKEN).build()
-
-        # Добавляем обработчики
-        conv = ConversationHandler(
-            entry_points=[CommandHandler("create", create_start)],
-            states={
-                ASK_TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, create_time_received)],
-                ASK_DURATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, create_duration_received)]
-            },
-            fallbacks=[CommandHandler("cancel", cancel)]
-        )
-
-        bot_app.add_handler(CommandHandler("start", start))
-        bot_app.add_handler(conv)
-        bot_app.add_handler(CommandHandler("list", list_calls))
-        bot_app.add_handler(CommandHandler("delete", delete_call))
-
-        logger.info("Bot application created successfully")
-
-        # Установка вебхука
-        webhook_url = f"{WEBAPP_URL}/webhook"
-        await bot_app.bot.set_webhook(webhook_url)
-        logger.info(f"Webhook set to: {webhook_url}")
-
-    except Exception as e:
-        logger.error(f"Failed to create bot application: {e}")
-        bot_app = None
-
-    yield
-
-    # Shutdown
-    if bot_app:
-        try:
-            await bot_app.bot.delete_webhook()
-            await bot_app.shutdown()
-        except Exception as e:
-            logger.error(f"Error during bot shutdown: {e}")
-
-    scheduler.shutdown()
-
-    if http_session:
-        await http_session.close()
-
-
-# Инициализация FastAPI приложения с lifespan
-app = FastAPI(lifespan=lifespan)
-WEBAPP_DIR = os.environ.get("WEBAPP_DIR", "webapp")
-app.mount("/", StaticFiles(directory=WEBAPP_DIR, html=True), name="webapp")
-
-if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=PORT)
