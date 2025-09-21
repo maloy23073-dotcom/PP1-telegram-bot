@@ -1,25 +1,452 @@
-/* Обновляем стили для новой структуры */
-.input-group {
+/* webapp/style.css - Telegram-like theme with two pages */
+:root {
+  --tg-bg: #0f0f0f;
+  --tg-secondary-bg: #1f1f1f;
+  --tg-card-bg: #1e1e1e;
+  --tg-text: #ffffff;
+  --tg-secondary-text: #999999;
+  --tg-accent: #2aabee;
+  --tg-accent-hover: #229ed9;
+  --tg-danger: #e64d4d;
+  --tg-success: #5ec16a;
+  --tg-warning: #f0b90b;
+  --tg-radius: 12px;
+  --tg-radius-sm: 8px;
+  --tg-shadow: 0 2px 16px rgba(0, 0, 0, 0.15);
+  --tg-transition: all 0.2s ease;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+  background: var(--tg-bg);
+  color: var(--tg-text);
+  line-height: 1.4;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* Page management */
+.page {
+  display: none;
+  height: 100vh;
+  overflow-y: auto;
+}
+
+.page.active {
+  display: block;
+}
+
+/* Welcome page styles */
+#welcomePage {
+  padding: 20px;
   display: flex;
   flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+}
+
+.container {
+  width: 100%;
+  max-width: 400px;
+  margin: 0 auto;
+}
+
+.header {
+  text-align: center;
+  margin-bottom: 32px;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.logo h1 {
+  font-size: 28px;
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--tg-accent), #8774e1);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.subtitle {
+  color: var(--tg-secondary-text);
+  font-size: 16px;
+}
+
+.features {
+  display: flex;
+  justify-content: center;
+  gap: 24px;
+  margin-bottom: 32px;
+  flex-wrap: wrap;
+}
+
+.feature {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.feature-icon {
+  font-size: 24px;
+  width: 50px;
+  height: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--tg-card-bg);
+  border-radius: 50%;
+}
+
+.feature-text {
+  font-size: 12px;
+  color: var(--tg-secondary-text);
+  text-align: center;
+  max-width: 80px;
+}
+
+.card {
+  background: var(--tg-card-bg);
+  padding: 24px;
+  border-radius: var(--tg-radius);
+  box-shadow: var(--tg-shadow);
+  margin-bottom: 24px;
+}
+
+.card h2 {
+  font-size: 20px;
+  margin-bottom: 8px;
+  text-align: center;
+}
+
+.instruction {
+  color: var(--tg-secondary-text);
+  text-align: center;
+  margin-bottom: 20px;
+  font-size: 14px;
+}
+
+.input-group {
+  display: flex;
   gap: 12px;
   margin-bottom: 20px;
-  width: 100%;
 }
 
-/* Делаем кнопку полноразмерной */
-#joinBtn {
-  width: 100%;
+input#code {
+  flex: 1;
+  padding: 16px;
+  font-size: 18px;
+  text-align: center;
+  background: rgba(255, 255, 255, 0.08);
+  border: 2px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--tg-radius-sm);
+  color: var(--tg-text);
+  transition: var(--tg-transition);
+}
+
+input#code:focus {
+  outline: none;
+  border-color: var(--tg-accent);
+}
+
+button {
+  display: flex;
+  align-items: center;
   justify-content: center;
+  gap: 8px;
+  padding: 16px 20px;
+  border-radius: var(--tg-radius-sm);
+  border: none;
+  font-weight: 600;
+  font-size: 16px;
+  cursor: pointer;
+  transition: var(--tg-transition);
 }
 
-/* Адаптивность для мобильных */
+button.primary {
+  background: var(--tg-accent);
+  color: white;
+}
+
+button.primary:hover {
+  background: var(--tg-accent-hover);
+}
+
+button.secondary {
+  background: transparent;
+  border: 2px solid var(--tg-secondary-text);
+  color: var(--tg-secondary-text);
+}
+
+button.secondary:hover {
+  border-color: var(--tg-text);
+  color: var(--tg-text);
+}
+
+.divider {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  margin: 20px 0;
+  color: var(--tg-secondary-text);
+  font-size: 14px;
+}
+
+.divider::before,
+.divider::after {
+  content: '';
+  flex: 1;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.divider::before {
+  margin-right: 10px;
+}
+
+.divider::after {
+  margin-left: 10px;
+}
+
+.instructions {
+  background: var(--tg-card-bg);
+  padding: 24px;
+  border-radius: var(--tg-radius);
+  box-shadow: var(--tg-shadow);
+}
+
+.instructions h3 {
+  font-size: 18px;
+  margin-bottom: 16px;
+  text-align: center;
+}
+
+.instructions ol {
+  padding-left: 20px;
+  color: var(--tg-secondary-text);
+}
+
+.instructions li {
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+
+/* Call page styles */
+#callPage {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--tg-bg);
+}
+
+.call-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px;
+  background: var(--tg-card-bg);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.call-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.call-id {
+  font-size: 14px;
+  color: var(--tg-secondary-text);
+}
+
+.call-timer {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--tg-success);
+}
+
+.icon-btn {
+  background: transparent;
+  border: none;
+  color: var(--tg-text);
+  padding: 8px;
+  border-radius: var(--tg-radius-sm);
+  cursor: pointer;
+}
+
+.icon-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.videos-container {
+  flex: 1;
+  position: relative;
+  padding: 16px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.remote-videos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 16px;
+  width: 100%;
+  height: 100%;
+}
+
+#localVideo {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 120px;
+  height: 90px;
+  border-radius: var(--tg-radius-sm);
+  background: var(--tg-card-bg);
+  border: 2px solid var(--tg-accent);
+  z-index: 10;
+}
+
+.call-controls {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  padding: 16px;
+  background: var(--tg-card-bg);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.control-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  color: var(--tg-text);
+  padding: 12px;
+  border-radius: var(--tg-radius-sm);
+  cursor: pointer;
+  transition: var(--tg-transition);
+  min-width: 80px;
+}
+
+.control-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.control-btn.danger {
+  background: var(--tg-danger);
+}
+
+.control-btn.danger:hover {
+  background: #d43c3c;
+}
+
+.control-btn span {
+  font-size: 12px;
+}
+
+.connection-status {
+  position: absolute;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.7);
+  color: white;
+  padding: 8px 16px;
+  border-radius: var(--tg-radius-sm);
+  font-size: 14px;
+  z-index: 100;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.card, .instructions {
+  animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes pulse {
+  0% { box-shadow: 0 0 0 0 rgba(42, 171, 238, 0.4); }
+  70% { box-shadow: 0 0 0 10px rgba(42, 171, 238, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(42, 171, 238, 0); }
+}
+
+#joinBtn {
+  animation: pulse 2s infinite;
+}
+
+/* Responsive design */
 @media (max-width: 768px) {
+  .features {
+    gap: 16px;
+  }
+
+  .feature-icon {
+    width: 40px;
+    height: 40px;
+    font-size: 18px;
+  }
+
+  .feature-text {
+    font-size: 11px;
+    max-width: 70px;
+  }
+
   .input-group {
+    flex-direction: column;
+  }
+
+  .call-controls {
     gap: 8px;
   }
 
-  #joinBtn {
-    padding: 14px 16px;
+  .control-btn {
+    min-width: 60px;
+    padding: 8px;
   }
+
+  .control-btn span {
+    font-size: 10px;
+  }
+
+  #localVideo {
+    width: 80px;
+    height: 60px;
+    top: 8px;
+    right: 8px;
+  }
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--tg-secondary-bg);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--tg-accent);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--tg-accent-hover);
 }
