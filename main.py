@@ -9,9 +9,10 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from aiohttp import ClientSession
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo, Update
 from telegram.ext import (
-    Updater, CommandHandler, MessageHandler, Filters,
-    ConversationHandler, CallbackContext
+    Application, CommandHandler, MessageHandler, filters,
+    ContextTypes, ConversationHandler
 )
+
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Request
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -152,7 +153,7 @@ async def end_call_job(call_id, app):
 
 
 # Обработчики команд бота
-async def start(update: Update, context: CallbackContext):
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     kb = [
         [InlineKeyboardButton("Создать звонок", callback_data="create")],
         [InlineKeyboardButton("Посмотреть созданные", callback_data="list")],
@@ -163,7 +164,7 @@ async def start(update: Update, context: CallbackContext):
     await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(kb))
 
 
-async def create_start(update: Update, context: CallbackContext):
+async def create_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Укажите время начала звонка в формате `YYYY-MM-DD HH:MM` или `DD.MM.YYYY HH:MM` или просто `HH:MM` (Europe/Vilnius).",
         parse_mode="Markdown")
@@ -188,7 +189,7 @@ def parse_time(text: str):
     return None
 
 
-async def create_time_received(update: Update, context: CallbackContext):
+async def create_time_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
     dt = parse_time(text)
     if not dt:
@@ -202,7 +203,7 @@ async def create_time_received(update: Update, context: CallbackContext):
     return ASK_DURATION
 
 
-async def create_duration_received(update: Update, context: CallbackContext):
+async def create_duration_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
     try:
         minutes = int(text)
@@ -238,7 +239,7 @@ async def create_duration_received(update: Update, context: CallbackContext):
     return ConversationHandler.END
 
 
-async def list_calls(update: Update, context: CallbackContext):
+async def list_calls(update: Update, context: ContextTypes.DEFAULT_TYPE):
     rows = get_user_calls(update.message.from_user.id)
     if not rows:
         await update.message.reply_text("У вас нет созданных звонков.")
@@ -252,7 +253,7 @@ async def list_calls(update: Update, context: CallbackContext):
     await update.message.reply_text(out)
 
 
-async def delete_call(update: Update, context: CallbackContext):
+async def delete_call(update: Update, context: ContextTypes.DEFAULT_TYPE):
     parts = update.message.text.split()
     if len(parts) < 2:
         await update.message.reply_text("Использование: /delete <6-значный код>")
@@ -287,7 +288,7 @@ async def delete_call(update: Update, context: CallbackContext):
         await update.message.reply_text("❌ Не удалось удалить звонок. Попробуйте позже.")
 
 
-async def cancel(update: Update, context: CallbackContext):
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Отмена.")
     return ConversationHandler.END
 
@@ -446,7 +447,7 @@ async def on_startup():
         scheduler.start()
 
         # Создаем приложение бота
-        bot_app = Updater(BOT_TOKEN, use_context=True)
+        bot_app = Application.builder().token(BOT_TOKEN).build()
 
         # Добавляем обработчики
         conv = ConversationHandler(
