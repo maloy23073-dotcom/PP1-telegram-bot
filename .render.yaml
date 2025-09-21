@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: telegram-videobot
+    name: telegram-videobot1
     env: python
     plan: free
     buildCommand: pip install -r requirements.txt
