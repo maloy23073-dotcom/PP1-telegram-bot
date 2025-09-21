@@ -1,11 +1,9 @@
 import os
-import sys
 import random
 import logging
 import asyncio
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
-from contextlib import asynccontextmanager
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from aiohttp import ClientSession
@@ -17,18 +15,6 @@ from telegram.ext import (
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Request
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
-print("=== Starting Application ===")
-print(f"Python version: {sys.version}")
-print(f"Current directory: {os.getcwd()}")
-print(f"Files in directory: {os.listdir('.')}")
-
-# Проверяем обязательные переменные
-required_vars = ["BOT_TOKEN", "WEBAPP_URL"]
-for var in required_vars:
-    value = os.environ.get(var)
-    print(f"{var}: {'SET' if value else 'MISSING'}")
-    if not value:
-        print(f"ERROR: {var} is required!")
 
 # Настройка логирования
 logging.basicConfig(
@@ -41,72 +27,6 @@ logger = logging.getLogger(__name__)
 app = FastAPI()
 WEBAPP_DIR = os.environ.get("WEBAPP_DIR", "webapp")
 app.mount("/", StaticFiles(directory=WEBAPP_DIR, html=True), name="webapp")
-WEBAPP_DIR = os.environ.get("WEBAPP_DIR", "webapp")
-print(f"WebApp directory: {WEBAPP_DIR}")
-if not os.path.exists(WEBAPP_DIR):
-    print(f"ERROR: WebApp directory '{WEBAPP_DIR}' does not exist!")
-else:
-    print(f"WebApp files: {os.listdir(WEBAPP_DIR)}")
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Startup
-    global http_session, bot_app
-
-    # Проверяем обязательные переменные окружения
-    if not BOT_TOKEN:
-        logger.error("BOT_TOKEN environment variable is not set")
-    if not WEBAPP_URL:
-        logger.error("WEBAPP_URL environment variable is not set")
-
-    http_session = ClientSession()
-    scheduler.start()
-
-    # Создаем приложение бота
-    try:
-        bot_app = Application.builder().token(BOT_TOKEN).build()
-
-        # Добавляем обработчики
-        conv = ConversationHandler(
-            entry_points=[CommandHandler("create", create_start)],
-            states={
-                ASK_TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, create_time_received)],
-                ASK_DURATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, create_duration_received)]
-            },
-            fallbacks=[CommandHandler("cancel", cancel)]
-        )
-
-        bot_app.add_handler(CommandHandler("start", start))
-        bot_app.add_handler(conv)
-        bot_app.add_handler(CommandHandler("list", list_calls))
-        bot_app.add_handler(CommandHandler("delete", delete_call))
-
-        logger.info("Bot application created successfully")
-
-        # Установка вебхука
-        webhook_url = f"{WEBAPP_URL}/webhook"
-        await bot_app.bot.set_webhook(webhook_url)
-        logger.info(f"Webhook set to: {webhook_url}")
-
-    except Exception as e:
-        logger.error(f"Failed to create bot application: {e}")
-        bot_app = None
-
-    yield
-
-    # Shutdown
-    if bot_app:
-        try:
-            await bot_app.bot.delete_webhook()
-            await bot_app.shutdown()
-        except Exception as e:
-            logger.error(f"Error during bot shutdown: {e}")
-
-    scheduler.shutdown()
-
-    if http_session:
-        await http_session.close()
-
 
 # States for ConversationHandler
 ASK_TIME, ASK_DURATION = range(2)
@@ -117,6 +37,17 @@ WEBAPP_URL = os.environ.get("WEBAPP_URL")
 SIGNALING_SECRET = os.environ.get("SIGNALING_SECRET", "HordownZklord1!2")
 TZ = ZoneInfo("Europe/Vilnius")
 PORT = int(os.environ.get("PORT", 10000))
+
+# In-memory storage вместо БД
+calls_storage = {}
+
+# Глобальные переменные
+scheduler = AsyncIOScheduler()
+http_session = None
+bot_app = None
+
+# rooms: code -> {"participants": {peer_id: websocket}, "lock": asyncio.Lock()}
+rooms = {}
 
 # In-memory storage вместо БД
 calls_storage = {}
