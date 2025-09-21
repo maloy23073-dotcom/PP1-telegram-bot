@@ -16,7 +16,81 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Requ
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 import uvicorn
+from contextlib import asynccontextmanager
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    global http_session, bot_app
+
+    # Проверяем обязательные переменные окружения
+    required_vars = ["BOT_TOKEN", "WEBAPP_URL"]
+    for var in required_vars:
+        if not os.environ.get(var):
+            logger.error(f"Missing required environment variable: {var}")
+
+    http_session = ClientSession()
+    scheduler.start()
+    bot_app = build_bot_app()
+
+    # Инициализация таблицы если БД доступна
+    if DB:
+        try:
+            cur = DB.cursor()
+            cur.execute("""
+                        CREATE TABLE IF NOT EXISTS calls
+                        (
+                            id
+                            SERIAL
+                            PRIMARY
+                            KEY,
+                            code
+                            VARCHAR
+                        (
+                            6
+                        ) UNIQUE NOT NULL,
+                            creator_id BIGINT NOT NULL,
+                            start_ts INTEGER NOT NULL,
+                            duration_min INTEGER NOT NULL,
+                            created_ts INTEGER NOT NULL,
+                            active BOOLEAN DEFAULT TRUE
+                            )
+                        """)
+            DB.commit()
+            cur.close()
+            logger.info("Database table initialized successfully")
+        except Exception as e:
+            logger.error(f"Error initializing database: {e}")
+    else:
+        logger.warning("Database not available - skipping table initialization")
+
+    # Установка вебхука
+    webhook_url = f"{WEBAPP_URL}/webhook"
+    try:
+        await bot_app.bot.set_webhook(webhook_url)
+        logger.info("Webhook set to: %s", webhook_url)
+    except Exception as e:
+        logger.error(f"Failed to set webhook: {e}")
+
+    yield
+
+    # Shutdown
+    if bot_app:
+        await bot_app.bot.delete_webhook()
+        await bot_app.shutdown()
+
+    scheduler.shutdown()
+
+    if http_session:
+        await http_session.close()
+
+    if DB:
+        DB.close()
+
+
+# Инициализация FastAPI приложения с lifespan
+app = FastAPI(lifespan=lifespan)
 # Настройка логирования
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -518,12 +592,6 @@ scheduler = AsyncIOScheduler()
 http_session = None
 bot_app = None
 
-
-# Инициализация при запуске
-@app.on_event("startup")
-async def on_startup():
-    global http_session, bot_app
-
     # Проверяем обязательные переменные окружения
     required_vars = ["BOT_TOKEN", "WEBAPP_URL", "DATABASE_URL"]
     for var in required_vars:
@@ -574,19 +642,7 @@ async def on_startup():
         logger.error(f"Failed to set webhook: {e}")
 
 
-@app.on_event("shutdown")
-async def on_shutdown():
-    if bot_app:
-        await bot_app.bot.delete_webhook()
-        await bot_app.shutdown()
 
-    scheduler.shutdown()
-
-    if http_session:
-        await http_session.close()
-
-    if DB:
-        DB.close()
 
 
 if __name__ == "__main__":
