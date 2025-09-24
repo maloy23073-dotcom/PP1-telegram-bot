@@ -6,6 +6,8 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiogram.types import WebAppInfo, InlineKeyboardButton, InlineKeyboardMarkup
 from fastapi import FastAPI, Request
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -24,7 +26,10 @@ bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 app = FastAPI()
 
-# Временное хранилище в памяти (замените на БД позже)
+# Подключаем статические файлы
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# Временное хранилище в памяти
 calls_storage = {}
 
 
@@ -113,7 +118,7 @@ async def cmd_delete(message: types.Message):
 # FastAPI endpoints для WebApp
 @app.get("/")
 async def read_root():
-    return {"message": "VideoCall Bot API", "status": "running"}
+    return FileResponse("static/index.html")
 
 
 @app.get("/call/{code}/status")
