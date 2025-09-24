@@ -580,3 +580,34 @@ video {
 .media-indicator.cam-off {
     background: var(--tg-danger);
 }
+/* Гарантируем правильное отображение страниц */
+#welcomePage {
+    display: flex;
+    flex-direction: column;
+}
+
+#callPage {
+    display: none; /* Изначально скрыта */
+    flex-direction: column;
+}
+
+/* Убедимся, что страницы занимают всю высоту */
+.page {
+    height: 100vh;
+    width: 100%;
+}
+
+/* Анимация перехода */
+.page {
+    transition: opacity 0.3s ease;
+}
+
+.page.active {
+    display: flex !important;
+    animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}

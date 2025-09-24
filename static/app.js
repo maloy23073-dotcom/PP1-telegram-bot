@@ -25,25 +25,28 @@ let timerInterval = null;
 // Функции для работы со страницами
 function showPage(page) {
     console.log('Переход на страницу:', page.id);
-    document.querySelectorAll('.page').forEach(p => {
-        p.classList.remove('active');
-        console.log('Скрыта страница:', p.id);
-    });
+
+    // Скрываем все страницы
+    welcomePage.style.display = 'none';
+    callPage.style.display = 'none';
+
+    // Показываем нужную страницу
+    page.style.display = 'flex';
+
+    // Обновляем классы для анимации
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     page.classList.add('active');
-    console.log('Показана страница:', page.id);
 }
 
 function showStatus(message, type = 'info') {
-    console.log('Статус:', message, type);
+    console.log('Статус:', message);
     statusElement.textContent = message;
     statusElement.className = `connection-status ${type}`;
     statusElement.style.display = 'block';
 
-    if (type !== 'error') {
-        setTimeout(() => {
-            statusElement.style.display = 'none';
-        }, 3000);
-    }
+    setTimeout(() => {
+        statusElement.style.display = 'none';
+    }, 3000);
 }
 
 // Проверка активности звонка
@@ -129,6 +132,7 @@ function toggleMicrophone() {
             isMicOn = audioTrack.enabled;
             toggleMic.classList.toggle('muted', !isMicOn);
             console.log('Микрофон:', isMicOn ? 'включен' : 'выключен');
+            showStatus(`Микрофон ${isMicOn ? 'включен' : 'выключен'}`, 'info');
         }
     }
 }
@@ -142,13 +146,14 @@ function toggleCamera() {
             toggleCam.classList.toggle('muted', !isCamOn);
             localVideo.style.opacity = isCamOn ? '1' : '0.5';
             console.log('Камера:', isCamOn ? 'включена' : 'выключена');
+            showStatus(`Камера ${isCamOn ? 'включена' : 'выключена'}`, 'info');
         }
     }
 }
 
 // Основная функция подключения
 async function join() {
-    console.log('Начало процесса подключения');
+    console.log('=== НАЧАЛО ПРОЦЕССА ПОДКЛЮЧЕНИЯ ===');
     const code = codeInput.value.trim();
 
     if (!/^\d{6}$/.test(code)) {
@@ -180,30 +185,30 @@ async function join() {
 
     try {
         await startLocalMedia();
-        console.log('Медиаустройства успешно подключены');
+        console.log('✅ Медиаустройства успешно подключены');
     } catch (e) {
         showStatus("Ошибка доступа к медиа: " + e.message, "error");
         return;
     }
 
-    showStatus("Подключение завершено...");
+    showStatus("Подключение завершено!");
 
     // Запускаем таймер
     startTimer();
 
     // Переходим на страницу звонка
-    console.log('Попытка перехода на страницу звонка');
+    console.log('🔄 Попытка перехода на страницу звонка');
     showPage(callPage);
+    console.log('✅ Переход на страницу звонка выполнен');
 
-    // Даем время для отрисовки
+    // Показываем финальный статус
     setTimeout(() => {
         showStatus("Подключено успешно", "success");
-        console.log('Переход на страницу звонка выполнен');
-    }, 100);
+    }, 500);
 }
 
 function leaveCall() {
-    console.log('Выход из звонка');
+    console.log('=== ВЫХОД ИЗ ЗВОНКА ===');
     stopTimer();
     stopLocalMedia();
     roomCode = '';
@@ -233,13 +238,17 @@ leaveBtn.addEventListener('click', leaveCall);
 
 // Обработка параметров URL (автозаполнение кода)
 window.addEventListener('load', () => {
-    console.log('Страница загружена');
+    console.log('📄 Страница загружена');
     const urlParams = new URLSearchParams(window.location.search);
     const code = urlParams.get('code');
     if (code && /^\d{6}$/.test(code)) {
         codeInput.value = code;
-        console.log('Код из URL установлен:', code);
+        console.log('🔢 Код из URL установлен:', code);
     }
+
+    // Инициализация отображения страниц
+    welcomePage.style.display = 'flex';
+    callPage.style.display = 'none';
 });
 
 // Добавим CSS классы для состояний кнопок
@@ -248,6 +257,21 @@ style.textContent = `
     .control-btn.muted {
         background: var(--tg-danger) !important;
         opacity: 0.7;
+    }
+    
+    .connection-status {
+        display: none;
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: rgba(0, 0, 0, 0.9);
+        color: white;
+        padding: 12px 24px;
+        border-radius: 12px;
+        font-size: 14px;
+        z-index: 1000;
+        text-align: center;
     }
     
     .connection-status.success {
@@ -265,4 +289,4 @@ style.textContent = `
 `;
 document.head.appendChild(style);
 
-console.log('app.js загружен');
+console.log('🚀 app.js загружен и готов к работе');
