@@ -12,5 +12,3 @@ services:
         fromSecret: BOT_TOKEN
       - key: WEBAPP_URL
         fromSecret: WEBAPP_URL
-      - key: DATABASE_URL
-        fromSecret: DATABASE_URL
