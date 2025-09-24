@@ -24,11 +24,17 @@ let timerInterval = null;
 
 // Функции для работы со страницами
 function showPage(page) {
-    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    console.log('Переход на страницу:', page.id);
+    document.querySelectorAll('.page').forEach(p => {
+        p.classList.remove('active');
+        console.log('Скрыта страница:', p.id);
+    });
     page.classList.add('active');
+    console.log('Показана страница:', page.id);
 }
 
 function showStatus(message, type = 'info') {
+    console.log('Статус:', message, type);
     statusElement.textContent = message;
     statusElement.className = `connection-status ${type}`;
     statusElement.style.display = 'block';
@@ -43,8 +49,10 @@ function showStatus(message, type = 'info') {
 // Проверка активности звонка
 async function checkCallActive(code) {
     try {
+        console.log('Проверка активности звонка:', code);
         const response = await fetch(`/call/${code}/status`);
         const data = await response.json();
+        console.log('Результат проверки:', data);
         return data.active;
     } catch (e) {
         console.error("Check call active error:", e);
@@ -55,8 +63,10 @@ async function checkCallActive(code) {
 // Регистрация в звонке
 async function joinCall(code) {
     try {
+        console.log('Регистрация в звонке:', code);
         const response = await fetch(`/call/${code}/join`, { method: 'POST' });
         const data = await response.json();
+        console.log('Результат регистрации:', data);
         return data.success;
     } catch (e) {
         console.error("Join call error:", e);
@@ -67,13 +77,16 @@ async function joinCall(code) {
 // Работа с медиа
 async function startLocalMedia() {
     try {
+        console.log('Запрос доступа к медиаустройствам');
         localStream = await navigator.mediaDevices.getUserMedia({
             video: true,
             audio: true
         });
+        console.log('Доступ к медиаустройствам получен');
         localVideo.srcObject = localStream;
         return true;
     } catch (error) {
+        console.error('Ошибка доступа к медиа:', error);
         throw new Error('Не удалось получить доступ к камере/микрофону');
     }
 }
@@ -82,6 +95,7 @@ function stopLocalMedia() {
     if (localStream) {
         localStream.getTracks().forEach(track => track.stop());
         localStream = null;
+        console.log('Медиаустройства отключены');
     }
 }
 
@@ -95,12 +109,14 @@ function startTimer() {
         const seconds = Math.floor((elapsed % 60000) / 1000).toString().padStart(2, '0');
         timerElement.textContent = `${hours}:${minutes}:${seconds}`;
     }, 1000);
+    console.log('Таймер запущен');
 }
 
 function stopTimer() {
     if (timerInterval) {
         clearInterval(timerInterval);
         timerInterval = null;
+        console.log('Таймер остановлен');
     }
 }
 
@@ -112,6 +128,7 @@ function toggleMicrophone() {
             audioTrack.enabled = !audioTrack.enabled;
             isMicOn = audioTrack.enabled;
             toggleMic.classList.toggle('muted', !isMicOn);
+            console.log('Микрофон:', isMicOn ? 'включен' : 'выключен');
         }
     }
 }
@@ -124,13 +141,16 @@ function toggleCamera() {
             isCamOn = videoTrack.enabled;
             toggleCam.classList.toggle('muted', !isCamOn);
             localVideo.style.opacity = isCamOn ? '1' : '0.5';
+            console.log('Камера:', isCamOn ? 'включена' : 'выключена');
         }
     }
 }
 
-// Основные функции
+// Основная функция подключения
 async function join() {
+    console.log('Начало процесса подключения');
     const code = codeInput.value.trim();
+
     if (!/^\d{6}$/.test(code)) {
         showStatus("Код должен быть 6 цифр", "error");
         return;
@@ -139,6 +159,7 @@ async function join() {
     // Проверка активности звонка
     showStatus("Проверка активности звонка...");
     const isActive = await checkCallActive(code);
+
     if (!isActive) {
         showStatus("Звонок не найден или не активен", "error");
         return;
@@ -147,6 +168,7 @@ async function join() {
     // Регистрация участника
     showStatus("Регистрация в звонке...");
     const joined = await joinCall(code);
+
     if (!joined) {
         showStatus("Ошибка регистрации в звонке", "error");
         return;
@@ -158,27 +180,36 @@ async function join() {
 
     try {
         await startLocalMedia();
+        console.log('Медиаустройства успешно подключены');
     } catch (e) {
         showStatus("Ошибка доступа к медиа: " + e.message, "error");
         return;
     }
 
-    showStatus("Подключение...");
+    showStatus("Подключение завершено...");
 
     // Запускаем таймер
     startTimer();
 
     // Переходим на страницу звонка
+    console.log('Попытка перехода на страницу звонка');
     showPage(callPage);
-    showStatus("Подключено успешно", "success");
+
+    // Даем время для отрисовки
+    setTimeout(() => {
+        showStatus("Подключено успешно", "success");
+        console.log('Переход на страницу звонка выполнен');
+    }, 100);
 }
 
 function leaveCall() {
+    console.log('Выход из звонка');
     stopTimer();
     stopLocalMedia();
     roomCode = '';
     showPage(welcomePage);
     codeInput.value = '';
+    showStatus("Звонок завершен", "info");
 }
 
 // Обработчики событий
@@ -202,14 +233,36 @@ leaveBtn.addEventListener('click', leaveCall);
 
 // Обработка параметров URL (автозаполнение кода)
 window.addEventListener('load', () => {
+    console.log('Страница загружена');
     const urlParams = new URLSearchParams(window.location.search);
     const code = urlParams.get('code');
     if (code && /^\d{6}$/.test(code)) {
         codeInput.value = code;
+        console.log('Код из URL установлен:', code);
     }
 });
 
-// Обработка изменения размера окна
-window.addEventListener('resize', () => {
-    // Можно добавить адаптацию интерфейса
-});
+// Добавим CSS классы для состояний кнопок
+const style = document.createElement('style');
+style.textContent = `
+    .control-btn.muted {
+        background: var(--tg-danger) !important;
+        opacity: 0.7;
+    }
+    
+    .connection-status.success {
+        background: var(--tg-success);
+    }
+    
+    .connection-status.error {
+        background: var(--tg-danger);
+    }
+    
+    .connection-status.info {
+        background: var(--tg-warning);
+        color: black;
+    }
+`;
+document.head.appendChild(style);
+
+console.log('app.js загружен');
