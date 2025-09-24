@@ -11,30 +11,20 @@ const statusElement = document.getElementById('status');
 const toggleMic = document.getElementById('toggleMic');
 const toggleCam = document.getElementById('toggleCam');
 const leaveBtn = document.getElementById('leaveBtn');
-const backBtn = document.getElementById('backBtn');
 
 // Переменные состояния
 let roomCode = '';
 let localStream = null;
-let isMicOn = true;
-let isCamOn = true;
-let timerInterval = null;
 let websocket = null;
 let peerConnections = {};
-let localUserId = generateUserId();
-
-// Генерация ID пользователя
-function generateUserId() {
-    return 'user_' + Math.random().toString(36).substr(2, 9);
-}
+let localUserId = Math.random().toString(36).substr(2, 9);
+let timerInterval = null;
 
 // Функции для работы со страницами
 function showPage(page) {
     welcomePage.style.display = 'none';
     callPage.style.display = 'none';
     page.style.display = 'flex';
-    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-    page.classList.add('active');
 }
 
 function showStatus(message, type = 'info') {
@@ -55,95 +45,88 @@ function connectWebSocket() {
     websocket = new WebSocket(wsUrl);
 
     websocket.onopen = () => {
-        console.log('WebSocket connected');
+        console.log('✅ WebSocket connected');
         showStatus("Соединение установлено", "success");
-
-        // Запрашиваем список пользователей
-        websocket.send(JSON.stringify({ type: "get_users" }));
     };
 
-    websocket.onmessage = (event) => {
+    websocket.onmessage = async (event) => {
         const message = JSON.parse(event.data);
-        handleWebSocketMessage(message);
+        console.log('📨 Received:', message.type, 'from:', message.from);
+        await handleWebSocketMessage(message);
     };
 
     websocket.onclose = () => {
-        console.log('WebSocket disconnected');
+        console.log('❌ WebSocket disconnected');
         showStatus("Соединение разорвано", "error");
-    };
-
-    websocket.onerror = (error) => {
-        console.error('WebSocket error:', error);
-        showStatus("Ошибка соединения", "error");
     };
 }
 
 // Обработка сообщений WebSocket
-function handleWebSocketMessage(message) {
-    console.log('Received message:', message);
-
+async function handleWebSocketMessage(message) {
     switch (message.type) {
         case "user_joined":
-            showStatus(`Пользователь присоединился: ${message.user_id}`, "info");
-            createPeerConnection(message.user_id);
+            showStatus(`Участник присоединился`, "info");
+            await createPeerConnection(message.from);
             break;
 
         case "user_left":
-            showStatus(`Пользователь вышел: ${message.user_id}`, "info");
-            removeRemoteVideo(message.user_id);
-            break;
-
-        case "users_list":
-            message.users.forEach(userId => {
-                if (userId !== localUserId) {
-                    createPeerConnection(userId);
-                }
-            });
+            showStatus(`Участник вышел`, "info");
+            removePeerConnection(message.from);
             break;
 
         case "offer":
-            handleOffer(message.offer, message.from);
+            await handleOffer(message.offer, message.from);
             break;
 
         case "answer":
-            handleAnswer(message.answer, message.from);
+            await handleAnswer(message.answer, message.from);
             break;
 
         case "ice_candidate":
-            handleIceCandidate(message.candidate, message.from);
+            await handleIceCandidate(message.candidate, message.from);
             break;
     }
 }
 
 // WebRTC функции
-function createPeerConnection(userId) {
-    if (peerConnections[userId]) return;
+async function createPeerConnection(userId) {
+    if (peerConnections[userId]) {
+        console.log('Peer connection already exists for:', userId);
+        return;
+    }
 
-    const peerConnection = new RTCPeerConnection({
+    console.log('Creating peer connection for:', userId);
+
+    const configuration = {
         iceServers: [
             { urls: 'stun:stun.l.google.com:19302' },
             { urls: 'stun:stun1.l.google.com:19302' }
         ]
-    });
+    };
 
+    const peerConnection = new RTCPeerConnection(configuration);
     peerConnections[userId] = peerConnection;
 
-    // Добавляем локальный поток
+    // Добавляем локальные треки
     if (localStream) {
         localStream.getTracks().forEach(track => {
+            console.log('Adding local track:', track.kind);
             peerConnection.addTrack(track, localStream);
         });
     }
 
     // Обработка удаленного потока
     peerConnection.ontrack = (event) => {
-        console.log('Received remote stream from:', userId);
-        addRemoteVideo(userId, event.streams[0]);
+        console.log('✅ Received remote stream from:', userId);
+        const remoteStream = event.streams[0];
+        addRemoteVideo(userId, remoteStream);
+        showStatus("Видеосвязь установлена!", "success");
     };
 
-    // Генерация ICE кандидатов
+    // ICE кандидаты
     peerConnection.onicecandidate = (event) => {
         if (event.candidate) {
+            console.log('Sending ICE candidate to:', userId);
             websocket.send(JSON.stringify({
                 type: "ice_candidate",
                 candidate: event.candidate,
@@ -152,18 +135,12 @@ function createPeerConnection(userId) {
         }
     };
 
-    // Создаем offer для нового пользователя
-    if (userId !== localUserId) {
-        createOffer(userId);
-    }
-}
-
-async function createOffer(userId) {
+    // Создаем offer
     try {
-        const peerConnection = peerConnections[userId];
         const offer = await peerConnection.createOffer();
         await peerConnection.setLocalDescription(offer);
 
+        console.log('Sending offer to:', userId);
         websocket.send(JSON.stringify({
             type: "offer",
             offer: offer,
@@ -175,13 +152,20 @@ async function createOffer(userId) {
 }
 
 async function handleOffer(offer, fromUserId) {
-    try {
-        const peerConnection = peerConnections[fromUserId] || createPeerConnection(fromUserId);
-        await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+    console.log('Handling offer from:', fromUserId);
 
+    if (!peerConnections[fromUserId]) {
+        await createPeerConnection(fromUserId);
+    }
+
+    const peerConnection = peerConnections[fromUserId];
+
+    try {
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
         const answer = await peerConnection.createAnswer();
         await peerConnection.setLocalDescription(answer);
 
+        console.log('Sending answer to:', fromUserId);
         websocket.send(JSON.stringify({
             type: "answer",
             answer: answer,
@@ -193,73 +177,90 @@ async function handleOffer(offer, fromUserId) {
 }
 
 async function handleAnswer(answer, fromUserId) {
-    try {
-        const peerConnection = peerConnections[fromUserId];
-        if (peerConnection) {
+    console.log('Handling answer from:', fromUserId);
+
+    const peerConnection = peerConnections[fromUserId];
+    if (peerConnection) {
+        try {
             await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+            console.log('✅ Answer set successfully');
+        } catch (error) {
+            console.error('Error handling answer:', error);
         }
-    } catch (error) {
-        console.error('Error handling answer:', error);
     }
 }
 
 async function handleIceCandidate(candidate, fromUserId) {
-    try {
-        const peerConnection = peerConnections[fromUserId];
-        if (peerConnection) {
+    console.log('Handling ICE candidate from:', fromUserId);
+
+    const peerConnection = peerConnections[fromUserId];
+    if (peerConnection) {
+        try {
             await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+            console.log('✅ ICE candidate added');
+        } catch (error) {
+            console.error('Error handling ICE candidate:', error);
         }
-    } catch (error) {
-        console.error('Error handling ICE candidate:', error);
     }
+}
+
+function removePeerConnection(userId) {
+    if (peerConnections[userId]) {
+        peerConnections[userId].close();
+        delete peerConnections[userId];
+    }
+    removeRemoteVideo(userId);
 }
 
 // Управление видео элементами
 function addRemoteVideo(userId, stream) {
-    // Удаляем существующее видео если есть
+    // Удаляем старое видео если есть
     removeRemoteVideo(userId);
 
     const videoElement = document.createElement('video');
     videoElement.id = `remoteVideo_${userId}`;
     videoElement.autoplay = true;
     videoElement.playsInline = true;
+    videoElement.muted = false; // Важно: не mute удаленное видео!
     videoElement.srcObject = stream;
+
+    // Стилизация
     videoElement.style.width = '100%';
     videoElement.style.height = '100%';
+    videoElement.style.objectFit = 'cover';
     videoElement.style.borderRadius = '8px';
+    videoElement.style.backgroundColor = '#1e1e1e';
 
     const videoContainer = document.createElement('div');
     videoContainer.className = 'remote-video-container';
     videoContainer.style.position = 'relative';
     videoContainer.style.width = '100%';
     videoContainer.style.height = '100%';
+    videoContainer.style.minHeight = '200px';
     videoContainer.appendChild(videoElement);
 
-    // Добавляем индикатор пользователя
+    // Индикатор пользователя
     const userLabel = document.createElement('div');
-    userLabel.textContent = `Участник ${userId.substr(5)}`;
+    userLabel.textContent = 'Участник';
     userLabel.style.position = 'absolute';
-    userLabel.style.bottom = '5px';
-    userLabel.style.left = '5px';
+    userLabel.style.bottom = '8px';
+    userLabel.style.left = '8px';
     userLabel.style.background = 'rgba(0,0,0,0.7)';
     userLabel.style.color = 'white';
-    userLabel.style.padding = '2px 6px';
+    userLabel.style.padding = '4px 8px';
     userLabel.style.borderRadius = '4px';
-    userLabel.style.fontSize = '10px';
+    userLabel.style.fontSize = '12px';
     videoContainer.appendChild(userLabel);
 
     remotesContainer.appendChild(videoContainer);
-    showStatus(`Участник подключен`, "success");
+
+    console.log('✅ Remote video added for:', userId);
 }
 
 function removeRemoteVideo(userId) {
     const existingVideo = document.getElementById(`remoteVideo_${userId}`);
-    if (existingVideo) {
+    if (existingVideo && existingVideo.parentElement) {
         existingVideo.parentElement.remove();
-    }
-    if (peerConnections[userId]) {
-        peerConnections[userId].close();
-        delete peerConnections[userId];
     }
 }
 
@@ -267,12 +268,23 @@ function removeRemoteVideo(userId) {
 async function startLocalMedia() {
     try {
         localStream = await navigator.mediaDevices.getUserMedia({
-            video: true,
-            audio: true
+            video: {
+                width: { ideal: 640 },
+                height: { ideal: 480 }
+            },
+            audio: {
+                echoCancellation: true,
+                noiseSuppression: true
+            }
         });
+
         localVideo.srcObject = localStream;
+        localVideo.muted = true; // Mute локальное видео
+
+        console.log('✅ Local media started');
         return true;
     } catch (error) {
+        console.error('❌ Error accessing media devices:', error);
         throw new Error('Не удалось получить доступ к камере/микрофону');
     }
 }
@@ -284,7 +296,7 @@ function stopLocalMedia() {
     }
 }
 
-// Таймер звонка
+// Таймер
 function startTimer() {
     let seconds = 0;
     timerInterval = setInterval(() => {
@@ -309,7 +321,7 @@ function toggleMicrophone() {
         const audioTrack = localStream.getAudioTracks()[0];
         if (audioTrack) {
             audioTrack.enabled = !audioTrack.enabled;
-            isMicOn = audioTrack.enabled;
+            const isMicOn = audioTrack.enabled;
             toggleMic.classList.toggle('muted', !isMicOn);
             showStatus(`Микрофон ${isMicOn ? 'включен' : 'выключен'}`, 'info');
         }
@@ -321,9 +333,9 @@ function toggleCamera() {
         const videoTrack = localStream.getVideoTracks()[0];
         if (videoTrack) {
             videoTrack.enabled = !videoTrack.enabled;
-            isCamOn = videoTrack.enabled;
+            const isCamOn = videoTrack.enabled;
             toggleCam.classList.toggle('muted', !isCamOn);
-            localVideo.style.opacity = isCamOn ? '1' : '0.5';
+            localVideo.style.opacity = isCamOn ? '1' : '0.3';
             showStatus(`Камера ${isCamOn ? 'включена' : 'выключена'}`, 'info');
         }
     }
@@ -356,12 +368,12 @@ async function join() {
 
     roomCode = code;
     currentCodeSpan.textContent = code;
-    showStatus("Запрашиваю доступ к камере/микрофону...");
 
     try {
+        showStatus("Запрашиваю доступ к камере/микрофону...");
         await startLocalMedia();
     } catch (e) {
-        showStatus("Ошибка доступа к медиа: " + e.message, "error");
+        showStatus("Ошибка доступа к медиа", "error");
         return;
     }
 
@@ -377,7 +389,7 @@ async function join() {
     showPage(callPage);
 
     setTimeout(() => {
-        showStatus("Подключено успешно", "success");
+        showStatus("Готов к видеозвонку!", "success");
     }, 1000);
 }
 
@@ -389,11 +401,15 @@ function leaveCall() {
 
     // Закрываем все peer соединения
     Object.keys(peerConnections).forEach(userId => {
-        removeRemoteVideo(userId);
+        removePeerConnection(userId);
     });
 
     stopTimer();
     stopLocalMedia();
+
+    // Очищаем контейнер удаленных видео
+    remotesContainer.innerHTML = '';
+
     roomCode = '';
     showPage(welcomePage);
     codeInput.value = '';
@@ -423,10 +439,11 @@ async function joinCall(code) {
 
 // Обработчики событий
 joinBtn.addEventListener('click', join);
+
 codeInput.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') join();
 });
-backBtn.addEventListener('click', leaveCall);
+
 leaveBtn.addEventListener('click', leaveCall);
 toggleMic.addEventListener('click', toggleMicrophone);
 toggleCam.addEventListener('click', toggleCamera);
@@ -441,4 +458,6 @@ window.addEventListener('load', () => {
     if (code && /^\d{6}$/.test(code)) {
         codeInput.value = code;
     }
+
+    console.log('🚀 VideoCall app initialized');
 });

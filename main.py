@@ -184,6 +184,9 @@ async def cmd_delete(message: types.Message):
 
 
 # WebSocket для WebRTC сигналинга
+# ... остальной код остается таким же до WebSocket части ...
+
+# WebSocket для WebRTC сигналинга
 @app.websocket("/ws/{room_code}/{user_id}")
 async def websocket_endpoint(websocket: WebSocket, room_code: str, user_id: str):
     await manager.connect(websocket, room_code, user_id)
@@ -191,54 +194,32 @@ async def websocket_endpoint(websocket: WebSocket, room_code: str, user_id: str)
         while True:
             data = await websocket.receive_text()
             message = json.loads(data)
+            print(f"Received message from {user_id} in {room_code}: {message['type']}")
 
-            # Обрабатываем WebRTC сигналы
-            if message["type"] == "offer":
-                # Пересылаем offer другим участникам
-                await manager.notify_users(room_code, {
-                    "type": "offer",
-                    "offer": message["offer"],
-                    "from": user_id
-                }, exclude_user=user_id)
-
-            elif message["type"] == "answer":
-                # Пересылаем answer отправителю offer
-                target_user = message.get("to")
-                if target_user and room_code in manager.user_data:
-                    if target_user in manager.user_data[room_code]:
-                        await manager.send_personal_message({
-                            "type": "answer",
-                            "answer": message["answer"],
-                            "from": user_id
-                        }, manager.user_data[room_code][target_user]["websocket"])
-
-            elif message["type"] == "ice_candidate":
-                # Пересылаем ICE кандидата
-                target_user = message.get("to")
-                if target_user and room_code in manager.user_data:
-                    if target_user in manager.user_data[room_code]:
-                        await manager.send_personal_message({
-                            "type": "ice_candidate",
-                            "candidate": message["candidate"],
-                            "from": user_id
-                        }, manager.user_data[room_code][target_user]["websocket"])
-
-            elif message["type"] == "get_users":
-                # Отправляем список пользователей в комнате
-                if room_code in manager.user_data:
-                    users = list(manager.user_data[room_code].keys())
-                    await manager.send_personal_message({
-                        "type": "users_list",
-                        "users": users
-                    }, websocket)
+            # Просто пересылаем все сообщения всем участникам комнаты
+            if room_code in manager.active_connections:
+                for connection in manager.active_connections[room_code]:
+                    if connection != websocket:  # Не отправляем себе
+                        try:
+                            await connection.send_text(json.dumps({
+                                **message,
+                                "from": user_id
+                            }))
+                        except Exception as e:
+                            print(f"Error sending to connection: {e}")
 
     except WebSocketDisconnect:
         manager.disconnect(websocket, room_code, user_id)
-        await manager.notify_users(room_code, {
-            "type": "user_left",
-            "user_id": user_id
-        })
-
+        # Уведомляем других участников
+        if room_code in manager.active_connections:
+            for connection in manager.active_connections[room_code]:
+                try:
+                    await connection.send_text(json.dumps({
+                        "type": "user_left",
+                        "user_id": user_id
+                    }))
+                except Exception as e:
+                    print(f"Error notifying about disconnect: {e}")
 
 # FastAPI endpoints для WebApp
 @app.get("/")
