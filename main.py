@@ -1,13 +1,15 @@
 import os
 import logging
 import random
+import json
 from datetime import datetime
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiogram.types import WebAppInfo, InlineKeyboardButton, InlineKeyboardMarkup
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+import asyncio
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -29,11 +31,77 @@ app = FastAPI()
 # Подключаем статические файлы
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# Временное хранилище в памяти
+
+# Хранилище для управления соединениями
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: dict[str, list[WebSocket]] = {}
+        self.user_data: dict[str, dict] = {}
+
+    async def connect(self, websocket: WebSocket, room_code: str, user_id: str):
+        await websocket.accept()
+
+        if room_code not in self.active_connections:
+            self.active_connections[room_code] = []
+            self.user_data[room_code] = {}
+
+        self.active_connections[room_code].append(websocket)
+        self.user_data[room_code][user_id] = {
+            "websocket": websocket,
+            "joined_at": datetime.now()
+        }
+
+        logger.info(f"User {user_id} joined room {room_code}")
+
+        # Уведомляем других участников о новом пользователе
+        await self.notify_users(room_code, {
+            "type": "user_joined",
+            "user_id": user_id
+        }, exclude_user=user_id)
+
+    def disconnect(self, websocket: WebSocket, room_code: str, user_id: str):
+        if room_code in self.active_connections:
+            if websocket in self.active_connections[room_code]:
+                self.active_connections[room_code].remove(websocket)
+
+            if user_id in self.user_data[room_code]:
+                del self.user_data[room_code][user_id]
+
+            logger.info(f"User {user_id} left room {room_code}")
+
+            # Если комната пуста, удаляем ее
+            if not self.active_connections[room_code]:
+                del self.active_connections[room_code]
+                del self.user_data[room_code]
+
+    async def send_personal_message(self, message: dict, websocket: WebSocket):
+        await websocket.send_json(message)
+
+    async def broadcast(self, room_code: str, message: dict):
+        if room_code in self.active_connections:
+            for connection in self.active_connections[room_code]:
+                try:
+                    await connection.send_json(message)
+                except Exception as e:
+                    logger.error(f"Error sending message: {e}")
+
+    async def notify_users(self, room_code: str, message: dict, exclude_user: str = None):
+        if room_code in self.user_data:
+            for user_id, data in self.user_data[room_code].items():
+                if user_id != exclude_user:
+                    try:
+                        await data["websocket"].send_json(message)
+                    except Exception as e:
+                        logger.error(f"Error notifying user {user_id}: {e}")
+
+
+manager = ConnectionManager()
+
+# Временное хранилище звонков
 calls_storage = {}
 
 
-# Обработчики команд
+# Обработчики команд бота
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
@@ -113,6 +181,63 @@ async def cmd_delete(message: types.Message):
         await message.answer(f"✅ **Звонок {code} удален**", parse_mode="Markdown")
     else:
         await message.answer("❌ **Звонок не найден или у вас нет прав для его удаления**", parse_mode="Markdown")
+
+
+# WebSocket для WebRTC сигналинга
+@app.websocket("/ws/{room_code}/{user_id}")
+async def websocket_endpoint(websocket: WebSocket, room_code: str, user_id: str):
+    await manager.connect(websocket, room_code, user_id)
+    try:
+        while True:
+            data = await websocket.receive_text()
+            message = json.loads(data)
+
+            # Обрабатываем WebRTC сигналы
+            if message["type"] == "offer":
+                # Пересылаем offer другим участникам
+                await manager.notify_users(room_code, {
+                    "type": "offer",
+                    "offer": message["offer"],
+                    "from": user_id
+                }, exclude_user=user_id)
+
+            elif message["type"] == "answer":
+                # Пересылаем answer отправителю offer
+                target_user = message.get("to")
+                if target_user and room_code in manager.user_data:
+                    if target_user in manager.user_data[room_code]:
+                        await manager.send_personal_message({
+                            "type": "answer",
+                            "answer": message["answer"],
+                            "from": user_id
+                        }, manager.user_data[room_code][target_user]["websocket"])
+
+            elif message["type"] == "ice_candidate":
+                # Пересылаем ICE кандидата
+                target_user = message.get("to")
+                if target_user and room_code in manager.user_data:
+                    if target_user in manager.user_data[room_code]:
+                        await manager.send_personal_message({
+                            "type": "ice_candidate",
+                            "candidate": message["candidate"],
+                            "from": user_id
+                        }, manager.user_data[room_code][target_user]["websocket"])
+
+            elif message["type"] == "get_users":
+                # Отправляем список пользователей в комнате
+                if room_code in manager.user_data:
+                    users = list(manager.user_data[room_code].keys())
+                    await manager.send_personal_message({
+                        "type": "users_list",
+                        "users": users
+                    }, websocket)
+
+    except WebSocketDisconnect:
+        manager.disconnect(websocket, room_code, user_id)
+        await manager.notify_users(room_code, {
+            "type": "user_left",
+            "user_id": user_id
+        })
 
 
 # FastAPI endpoints для WebApp
