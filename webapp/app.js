@@ -9,6 +9,16 @@ async function checkCallActive(code) {
     return false;
   }
 }
+async function joinCall(code) {
+  try {
+    const response = await fetch(`/call/${code}/join`, { method: 'POST' });
+    const data = await response.json();
+    return data.success;
+  } catch (e) {
+    console.error("Join call error:", e);
+    return false;
+  }
+}
 
 // Обновите функцию join()
 async function join() {
@@ -23,6 +33,14 @@ async function join() {
   const isActive = await checkCallActive(code);
   if (!isActive) {
     showStatus("Звонок не найден или не активен", "error");
+    return;
+  }
+
+  // Регистрация участника
+  showStatus("Регистрация в звонке...");
+  const joined = await joinCall(code);
+  if (!joined) {
+    showStatus("Ошибка регистрации в звонке", "error");
     return;
   }
 

@@ -1,380 +1,258 @@
 import os
-import random
 import logging
 import asyncio
 from datetime import datetime, timedelta
-from zoneinfo import ZoneInfo
+from aiogram import Bot, Dispatcher, types, F
+from aiogram.filters import Command
+from aiogram.types import WebAppInfo, InlineKeyboardButton, InlineKeyboardMarkup
+from fastapi import FastAPI, Request
+import psycopg2
+from psycopg2.extras import RealDictCursor
 
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from aiohttp import ClientSession
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Request
-from fastapi.responses import JSONResponse
-from fastapi.staticfiles import StaticFiles
-import uvicorn
-
-# Настройка логирования
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
-)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-# Инициализация FastAPI приложения
-app = FastAPI()
-
-# States for ConversationHandler
-ASK_TIME, ASK_DURATION = range(2)
 
 # Конфигурация
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 WEBAPP_URL = os.environ.get("WEBAPP_URL")
-SIGNALING_SECRET = os.environ.get("SIGNALING_SECRET", "HordownZklord1!2")
-TZ = ZoneInfo("Europe/Vilnius")
-PORT = int(os.environ.get("PORT", 10000))
+DATABASE_URL = os.environ.get("DATABASE_URL")
 
-# In-memory storage
-calls_storage = {}
-rooms = {}
+if not BOT_TOKEN:
+    raise ValueError("BOT_TOKEN environment variable is required!")
+if not WEBAPP_URL:
+    raise ValueError("WEBAPP_URL environment variable is required!")
+if not DATABASE_URL:
+    raise ValueError("DATABASE_URL environment variable is required!")
 
-# Глобальные переменные
-scheduler = AsyncIOScheduler()
-http_session = None
-bot_app = None
+# Инициализация бота
+bot = Bot(token=BOT_TOKEN)
+dp = Dispatcher()
 
-# Mount WebApp
-WEBAPP_DIR = os.environ.get("WEBAPP_DIR", "webapp")
-app.mount("/", StaticFiles(directory=WEBAPP_DIR, html=True), name="webapp")
-
-
-# Генерация кода
-def gen_code():
-    return "{:06d}".format(random.randint(0, 999999))
+# Инициализация FastAPI
+app = FastAPI()
 
 
-# Функции работы с хранилищем
-def save_call(code, creator_id, start_ts, duration_min):
-    call_id = f"{code}_{datetime.now().timestamp()}"
-    calls_storage[call_id] = {
-        'code': code,
-        'creator_id': creator_id,
-        'start_ts': start_ts,
-        'duration_min': duration_min,
-        'created_ts': int(datetime.now(tz=TZ).timestamp()),
-        'active': True
-    }
-    logger.info(f"Call saved: {code}")
-    return call_id
+# Подключение к PostgreSQL
+def get_db_connection():
+    """Подключение к базе данных"""
+    try:
+        # Для Render.com PostgreSQL
+        conn = psycopg2.connect(DATABASE_URL, sslmode='require')
+        return conn
+    except Exception as e:
+        logger.error(f"Database connection error: {e}")
+        raise
 
 
-def get_user_calls(user_id):
-    user_calls = []
-    for call_id, call_data in calls_storage.items():
-        if call_data['creator_id'] == user_id:
-            start_dt = datetime.fromtimestamp(call_data['start_ts'], tz=TZ).strftime('%Y-%m-%d %H:%M')
-            user_calls.append((
-                call_data['code'],
-                start_dt,
-                call_data['duration_min'],
-                call_data['active']
-            ))
-    return user_calls
-
-
-def get_call_by_code(code):
-    for call_id, call_data in calls_storage.items():
-        if call_data['code'] == code:
-            return (
-                call_id,
-                call_data['code'],
-                call_data['creator_id'],
-                call_data['start_ts'],
-                call_data['duration_min'],
-                call_data['active']
-            )
-    return None
-
-
-def mark_call_inactive(call_id):
-    if call_id in calls_storage:
-        calls_storage[call_id]['active'] = False
-        logger.info(f"Call {call_id} marked as inactive")
-        return True
-    return False
-
-
-# Функции планировщика
-async def send_5min_warn(call_id, app):
-    call_data = calls_storage.get(call_id)
-    if not call_data or not call_data['active']:
-        return
-
-    code = call_data['code']
-    creator_id = call_data['creator_id']
-
-    await app.bot.send_message(
-        chat_id=creator_id,
-        text=f"Через 5 минут начнётся ваш видеозвонок (код: {code}). Откройте мини-приложение и введите код."
+# Обработчики команд
+@dp.message(Command("start"))
+async def cmd_start(message: types.Message):
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🎥 Открыть VideoCall", web_app=WebAppInfo(url=WEBAPP_URL))]
+    ])
+    await message.answer(
+        "🎥 **VideoCall Bot**\n\n"
+        "Я помогу вам организовать видеозвонки через Telegram!\n\n"
+        "📋 **Доступные команды:**\n"
+        "/create - создать новый звонок\n"
+        "/list - список ваших звонков\n"
+        "/delete - удалить звонок\n\n"
+        "Нажмите кнопку ниже чтобы открыть видеозвонок:",
+        reply_markup=keyboard,
+        parse_mode="Markdown"
     )
 
 
-async def end_call_job(call_id, app):
-    call_data = calls_storage.get(call_id)
-    if not call_data or not call_data['active']:
-        return
-
-    code = call_data['code']
-    creator_id = call_data['creator_id']
-
-    mark_call_inactive(call_id)
+@dp.message(Command("create"))
+async def cmd_create(message: types.Message):
+    import random
 
     try:
-        async with ClientSession() as session:
-            async with session.post(
-                    f"{WEBAPP_URL}/end_room",
-                    json={"code": code, "secret": SIGNALING_SECRET},
-                    timeout=10
-            ) as response:
-                if response.status != 200:
-                    logger.error(f"Failed to end room: {response.status}")
+        conn = get_db_connection()
+        cur = conn.cursor()
+
+        # Генерируем уникальный 6-значный код
+        max_attempts = 10
+        code = None
+
+        for attempt in range(max_attempts):
+            code = ''.join([str(random.randint(0, 9)) for _ in range(6)])
+
+            # Проверяем, что код уникален
+            cur.execute("SELECT code FROM calls WHERE code = %s", (code,))
+            if not cur.fetchone():
+                break
+        else:
+            await message.answer("❌ **Не удалось создать уникальный код**\nПопробуйте еще раз.", parse_mode="Markdown")
+            cur.close()
+            conn.close()
+            return
+
+        start_ts = int(datetime.now().timestamp())
+        created_ts = start_ts
+
+        cur.execute(
+            "INSERT INTO calls (code, creator_id, start_ts, duration_min, created_ts, active) VALUES (%s, %s, %s, %s, %s, %s)",
+            (code, message.from_user.id, start_ts, 120, created_ts, True)
+        )
+        conn.commit()
+
+        await message.answer(
+            f"✅ **Звонок создан!**\n\n"
+            f"🔢 **Код для подключения:** `{code}`\n"
+            f"⏰ **Длительность:** 2 часа\n\n"
+            f"📱 **Чтобы присоединиться:**\n"
+            f"1. Откройте Mini App по кнопке ниже\n"
+            f"2. Введите код `{code}`\n"
+            f"3. Нажмите 'Подключиться'",
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="🎥 Открыть VideoCall", web_app=WebAppInfo(url=f"{WEBAPP_URL}?code={code}"))]
+            ])
+        )
+
+        cur.close()
+        conn.close()
+
     except Exception as e:
-        logger.error(f"Error calling signaling end_room: {e}")
-
-    await app.bot.send_message(
-        chat_id=creator_id,
-        text=f"Время звонка (код {code}) истекло — комната закрыта."
-    )
+        logger.error(f"Error creating call: {e}")
+        await message.answer("❌ **Ошибка при создании звонка**\nПопробуйте еще раз позже.", parse_mode="Markdown")
 
 
-# Обработчики команд бота
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    kb = [
-        [InlineKeyboardButton("Создать звонок", callback_data="create")],
-        [InlineKeyboardButton("Посмотреть созданные", callback_data="list")],
-        [InlineKeyboardButton("Удалить звонок", callback_data="delete")],
-        [InlineKeyboardButton("Открыть Mini App", web_app=WebAppInfo(url=WEBAPP_URL))]
-    ]
-    text = "Привет! Я бот для создания видеозвонков. Команды:\n/create — создать\n/list — посмотреть\n/delete <код> — удалить\nТакже можно открыть мини-приложение кнопкой ниже."
-    await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(kb))
-
-
-async def create_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "Укажите время начала звонка в формате HH:MM (Europe/Vilnius):")
-    return ASK_TIME
-
-
-def parse_time(text: str):
-    text = text.strip()
+@dp.message(Command("list"))
+async def cmd_list(message: types.Message):
     try:
-        dt = datetime.strptime(text, "%H:%M")
-        now = datetime.now(tz=TZ)
-        dt = dt.replace(year=now.year, month=now.month, day=now.day, tzinfo=TZ)
-        if dt < now:
-            dt = dt + timedelta(days=1)
-        return dt
-    except:
-        return None
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT code, start_ts, duration_min, active FROM calls WHERE creator_id = %s ORDER BY created_ts DESC",
+            (message.from_user.id,)
+        )
+        calls = cur.fetchall()
 
+        if not calls:
+            await message.answer("📭 **У вас нет созданных звонков**\n\nИспользуйте /create чтобы создать первый звонок",
+                                 parse_mode="Markdown")
+            cur.close()
+            conn.close()
+            return
 
-async def create_time_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = update.message.text
-    dt = parse_time(text)
-    if not dt:
-        await update.message.reply_text("Неверный формат. Используйте HH:MM")
-        return ASK_TIME
+        response = "📞 **Ваши активные звонки:**\n\n"
+        for call in calls:
+            code, start_ts, duration, active = call
+            start_time = datetime.fromtimestamp(start_ts).strftime('%d.%m.%Y %H:%M')
+            status = "✅ Активен" if active else "❌ Завершен"
+            response += f"🔢 **Код:** `{code}`\n"
+            response += f"⏰ **Время:** {start_time}\n"
+            response += f"⏱️ **Длительность:** {duration} мин\n"
+            response += f"📊 **Статус:** {status}\n\n"
 
-    context.user_data["call_start_dt"] = dt
-    await update.message.reply_text(
-        f"Время принято: {dt.strftime('%H:%M %Z')}. Укажите продолжительность в минутах:")
-    return ASK_DURATION
+        await message.answer(response, parse_mode="Markdown")
+        cur.close()
+        conn.close()
 
-
-async def create_duration_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = update.message.text.strip()
-    try:
-        minutes = int(text)
-        if minutes <= 0:
-            raise ValueError
-    except:
-        await update.message.reply_text("Неверный формат. Введите целое число минут.")
-        return ASK_DURATION
-
-    dt = context.user_data["call_start_dt"]
-    creator = update.message.from_user.id
-    code = gen_code()
-
-    while get_call_by_code(code):
-        code = gen_code()
-
-    call_id = save_call(code, creator, int(dt.timestamp()), minutes)
-
-    warn_time = dt - timedelta(minutes=5)
-    if warn_time > datetime.now(tz=TZ):
-        scheduler.add_job(send_5min_warn, "date", run_date=warn_time, args=[call_id, bot_app])
-
-    end_time = dt + timedelta(minutes=minutes)
-    scheduler.add_job(end_call_job, "date", run_date=end_time, args=[call_id, bot_app])
-
-    await update.message.reply_text(
-        f"✅ Звонок создан.\nКод: {code}\nВремя: {dt.strftime('%H:%M %Z')}\nДлительность: {minutes} мин.")
-    return ConversationHandler.END
-
-
-async def list_calls(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    rows = get_user_calls(update.message.from_user.id)
-    if not rows:
-        await update.message.reply_text("У вас нет созданных звонков.")
-        return
-
-    out = "Ваши звонки:\n"
-    for code, start, dur, active in rows:
-        status = "Активен" if active else "Закрыт"
-        out += f"• {code} — {start} — {dur} мин — {status}\n"
-
-    await update.message.reply_text(out)
-
-
-async def delete_call(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    parts = update.message.text.split()
-    if len(parts) < 2:
-        await update.message.reply_text("Использование: /delete <код>")
-        return
-
-    code = parts[1].strip()
-    row = get_call_by_code(code)
-    if not row:
-        await update.message.reply_text("Код не найден.")
-        return
-
-    cid, _, creator_id, _, _, active = row
-    if creator_id != update.message.from_user.id:
-        await update.message.reply_text("Вы не являетесь создателем этого звонка.")
-        return
-
-    if mark_call_inactive(cid):
-        try:
-            async with ClientSession() as session:
-                async with session.post(
-                        f"{WEBAPP_URL}/end_room",
-                        json={"code": code, "secret": SIGNALING_SECRET},
-                        timeout=10
-                ) as response:
-                    if response.status != 200:
-                        logger.error(f"Failed to end room: {response.status}")
-        except Exception as e:
-            logger.error(f"end_room error: {e}")
-
-        await update.message.reply_text(f"✅ Звонок {code} удалён.")
-    else:
-        await update.message.reply_text("❌ Не удалось удалить звонок.")
-
-
-async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Отмена.")
-    return ConversationHandler.END
-
-
-# WebSocket функции
-async def broadcast(room_code, message, exclude=None):
-    room = rooms.get(room_code)
-    if not room:
-        return
-
-    to_remove = []
-    for pid, ws in list(room["participants"].items()):
-        if exclude and pid == exclude:
-            continue
-        try:
-            await ws.send_json(message)
-        except:
-            to_remove.append(pid)
-
-    for pid in to_remove:
-        if pid in room["participants"]:
-            del room["participants"][pid]
-
-
-@app.websocket("/ws")
-async def ws_endpoint(websocket: WebSocket):
-    await websocket.accept()
-    peer_id = None
-    room_code = None
-
-    try:
-        while True:
-            data = await websocket.receive_json()
-            typ = data.get("type")
-
-            if typ == "join":
-                room_code = data.get("code")
-                peer_id = data.get("peer_id")
-
-                if room_code not in rooms:
-                    rooms[room_code] = {"participants": {}, "lock": asyncio.Lock()}
-
-                async with rooms[room_code]["lock"]:
-                    rooms[room_code]["participants"][peer_id] = websocket
-
-                existing = [p for p in rooms[room_code]["participants"].keys() if p != peer_id]
-                await websocket.send_json({"type": "peers", "peers": existing})
-                await broadcast(room_code, {"type": "new_peer", "peer_id": peer_id}, exclude=peer_id)
-
-            elif typ in ("offer", "answer", "ice"):
-                target = data.get("target")
-                room_code = data.get("code")
-                room = rooms.get(room_code)
-
-                if room and target in room["participants"]:
-                    try:
-                        await room["participants"][target].send_json(data)
-                    except:
-                        if room_code in rooms and target in rooms[room_code]["participants"]:
-                            del rooms[room_code]["participants"][target]
-
-            elif typ == "leave":
-                room_code = data.get("code")
-                peer_id = data.get("peer_id")
-                if room_code in rooms and peer_id in rooms[room_code]["participants"]:
-                    del rooms[room_code]["participants"][peer_id]
-                    await broadcast(room_code, {"type": "peer_left", "peer_id": peer_id})
-
-    except WebSocketDisconnect:
-        if room_code and peer_id and room_code in rooms and peer_id in rooms[room_code]["participants"]:
-            del rooms[room_code]["participants"][peer_id]
-            await broadcast(room_code, {"type": "peer_left", "peer_id": peer_id})
     except Exception as e:
-        logger.error(f"WS error: {e}")
-        if room_code and peer_id and room_code in rooms and peer_id in rooms[room_code]["participants"]:
-            del rooms[room_code]["participants"][peer_id]
+        logger.error(f"Database error in /list: {e}")
+        await message.answer("❌ **Ошибка при получении списка звонков**", parse_mode="Markdown")
 
 
-# API endpoints
-@app.post("/end_room")
-async def end_room(request: Request):
+@dp.message(Command("delete"))
+async def cmd_delete(message: types.Message):
+    args = message.text.split()
+    if len(args) < 2:
+        await message.answer("❌ **Использование:**\n`/delete <код_звонка>`\n\nПример: `/delete 123456`",
+                             parse_mode="Markdown")
+        return
+
+    code = args[1]
+    if not code.isdigit() or len(code) != 6:
+        await message.answer("❌ **Код должен состоять из 6 цифр**", parse_mode="Markdown")
+        return
+
     try:
-        payload = await request.json()
-        if payload.get("secret") != SIGNALING_SECRET:
-            raise HTTPException(status_code=403, detail="Forbidden")
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("DELETE FROM calls WHERE code = %s AND creator_id = %s", (code, message.from_user.id))
+        conn.commit()
 
-        code = payload.get("code")
-        if not code:
-            return JSONResponse({"ok": False, "reason": "no code"}, status_code=400)
+        if cur.rowcount > 0:
+            await message.answer(f"✅ **Звонок {code} удален**", parse_mode="Markdown")
+        else:
+            await message.answer("❌ **Звонок не найден или у вас нет прав для его удаления**", parse_mode="Markdown")
 
-        room = rooms.pop(code, None)
-        if room:
-            for pid, ws in list(room["participants"].items()):
-                try:
-                    await ws.send_json({"type": "room_closed"})
-                    await ws.close()
-                except:
-                    pass
+        cur.close()
+        conn.close()
 
-        return {"ok": True}
     except Exception as e:
-        logger.error(f"Error in end_room: {e}")
-        return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
+        logger.error(f"Database error in /delete: {e}")
+        await message.answer("❌ **Ошибка при удалении звонка**", parse_mode="Markdown")
+
+
+# FastAPI endpoints для WebApp
+@app.get("/")
+async def read_root():
+    return {"message": "VideoCall Bot API", "status": "running"}
+
+
+@app.get("/call/{code}/status")
+async def call_status(code: str):
+    """Проверка активности звонка"""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT active, start_ts, duration_min FROM calls WHERE code = %s", (code,))
+        call = cur.fetchone()
+        cur.close()
+        conn.close()
+
+        if call:
+            # Проверяем не истекло ли время звонка
+            end_time = call['start_ts'] + (call['duration_min'] * 60)
+            current_time = datetime.now().timestamp()
+            is_active = call['active'] and current_time <= end_time
+
+            time_left = max(0, end_time - current_time)
+            minutes_left = int(time_left // 60)
+
+            return {
+                "active": is_active,
+                "exists": True,
+                "minutes_left": minutes_left,
+                "valid_until": datetime.fromtimestamp(end_time).isoformat()
+            }
+        return {"active": False, "exists": False}
+    except Exception as e:
+        logger.error(f"Call status error: {e}")
+        return {"active": False, "exists": False}
+
+
+@app.post("/call/{code}/join")
+async def join_call(code: str):
+    """Регистрация участника звонка"""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("UPDATE calls SET active = TRUE WHERE code = %s", (code,))
+        conn.commit()
+        cur.close()
+        conn.close()
+        return {"success": True}
+    except Exception as e:
+        logger.error(f"Join call error: {e}")
+        return {"success": False}
+
+
+# Webhook endpoint для Telegram
+@app.post("/webhook")
+async def webhook(request: Request):
+    try:
+        data = await request.json()
+        update = types.Update(**data)
+        await dp.feed_update(bot, update)
+        return {"status": "ok"}
+    except Exception as e:
+        logger.error(f"Webhook error: {e}")
+        return {"status": "error", "message": str(e)}
 
 
 @app.get("/ping")
@@ -382,110 +260,53 @@ async def ping():
     return {"ok": True}
 
 
-@app.get("/debug")
-async def debug():
-    return {
-        "bot_initialized": bot_app is not None,
-        "calls_count": len(calls_storage),
-        "rooms_count": len(rooms)
-    }
-
-
-# Вебхук для бота
-@app.post("/webhook")
-async def webhook(request: Request):
-    try:
-        data = await request.json()
-
-        if not bot_app:
-            logger.error("Bot not initialized")
-            return {"status": "error", "message": "Bot not initialized"}
-
-        update = Update.de_json(data, bot_app.bot)
-        await bot_app.process_update(update)
-
-        return {"status": "ok"}
-    except Exception as e:
-        logger.error(f"Error processing update: {e}")
-        return {"status": "error", "message": str(e)}
-
-
-# Инициализация при запуске
 @app.on_event("startup")
 async def on_startup():
-    global http_session, bot_app
-
-    logger.info("=== Starting Application ===")
-
-    # Проверяем переменные окружения
-    if not BOT_TOKEN:
-        logger.error("❌ BOT_TOKEN not set")
-        return
-
-    if not WEBAPP_URL:
-        logger.error("❌ WEBAPP_URL not set")
-        return
-
-    logger.info(f"BOT_TOKEN: {BOT_TOKEN[:10]}...")
-    logger.info(f"WEBAPP_URL: {WEBAPP_URL}")
-
+    # Устанавливаем вебхук
+    webhook_url = f"{WEBAPP_URL}/webhook"
     try:
-        http_session = ClientSession()
-        scheduler.start()
-
-        # Создаем приложение бота - ТОЛЬКО СОВРЕМЕННЫЙ СИНТАКСИС
-        bot_app = Application.builder().token(BOT_TOKEN).build()
-        logger.info("✅ Bot application created")
-
-        # Добавляем обработчики
-        conv_handler = ConversationHandler(
-            entry_points=[CommandHandler("create", create_start)],
-            states={
-                ASK_TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, create_time_received)],
-                ASK_DURATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, create_duration_received)]
-            },
-            fallbacks=[CommandHandler("cancel", cancel)]
-        )
-
-        bot_app.add_handler(CommandHandler("start", start))
-        bot_app.add_handler(conv_handler)
-        bot_app.add_handler(CommandHandler("list", list_calls))
-        bot_app.add_handler(CommandHandler("delete", delete_call))
-
-        logger.info("✅ Handlers added")
-
-        # Устанавливаем вебхук
-        webhook_url = f"{WEBAPP_URL}/webhook"
-        await bot_app.bot.set_webhook(webhook_url)
-        logger.info(f"✅ Webhook set to: {webhook_url}")
-
-        # Проверяем бота
-        bot_info = await bot_app.bot.get_me()
-        logger.info(f"✅ Bot info: {bot_info.username} (ID: {bot_info.id})")
-
+        await bot.set_webhook(webhook_url)
+        logger.info(f"✅ Bot started successfully. Webhook: {webhook_url}")
     except Exception as e:
-        logger.error(f"❌ Startup failed: {e}")
-        import traceback
-        logger.error(traceback.format_exc())
+        logger.error(f"❌ Webhook setup failed: {e}")
+
+    # Инициализация базы данных
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("""
+                    CREATE TABLE IF NOT EXISTS calls
+                    (
+                        id
+                        SERIAL
+                        PRIMARY
+                        KEY,
+                        code
+                        VARCHAR
+                    (
+                        6
+                    ) UNIQUE NOT NULL,
+                        creator_id BIGINT NOT NULL,
+                        start_ts INTEGER NOT NULL,
+                        duration_min INTEGER NOT NULL,
+                        created_ts INTEGER NOT NULL,
+                        active BOOLEAN DEFAULT TRUE
+                        )
+                    """)
+        conn.commit()
+        cur.close()
+        conn.close()
+        logger.info("✅ Database initialized")
+    except Exception as e:
+        logger.error(f"❌ Database initialization failed: {e}")
 
 
 @app.on_event("shutdown")
 async def on_shutdown():
-    if bot_app:
-        try:
-            await bot_app.bot.delete_webhook()
-            await bot_app.shutdown()
-            logger.info("✅ Bot shutdown complete")
-        except Exception as e:
-            logger.error(f"Error during bot shutdown: {e}")
-
-    scheduler.shutdown()
-    logger.info("✅ Scheduler shutdown complete")
-
-    if http_session:
-        await http_session.close()
-        logger.info("✅ HTTP session closed")
+    await bot.session.close()
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=PORT)
+    import uvicorn
+
+    uvicorn.run(app, host="0.0.0.0", port=10000)
