@@ -3,6 +3,7 @@ import logging
 import random
 import string
 import time
+import jwt
 from datetime import datetime
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
@@ -32,7 +33,7 @@ try:
     logger.info("✅ JWT module is available")
 except ImportError:
     JWT_AVAILABLE = False
-    logger.warning("⚠️ JWT module not available - using simple tokens")
+    logger.warning("⚠️ JWT module not available - using open rooms")
 
 # Инициализация
 bot = Bot(token=BOT_TOKEN)
@@ -44,38 +45,41 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 calls_storage = {}
 
 
-def generate_room_token(room_name, user_id, is_moderator=False):
-    """Генерация токена для комнаты"""
-    if JWT_AVAILABLE:
-        try:
-            # JWT токен для организатора
-            JITSI_APP_ID = os.environ.get("JITSI_APP_ID", "telegram-bot")
-            JITSI_APP_SECRET = os.environ.get("JITSI_APP_SECRET", "default-secret-key")
+def generate_jwt_token(room_name, user_id, user_name="Participant", is_moderator=False):
+    """Генерация JWT токена для Jitsi Meet"""
+    if not JWT_AVAILABLE:
+        return None
 
-            payload = {
-                'context': {
-                    'user': {
-                        'id': user_id,
-                        'name': f'User_{user_id}',
-                        'moderator': is_moderator
-                    }
+    try:
+        # Используем стандартные настройки для Jitsi
+        JITSI_APP_ID = "telegram-bot"
+        JITSI_APP_SECRET = "your-secret-key-change-in-production"
+
+        payload = {
+            'context': {
+                'user': {
+                    'id': user_id,
+                    'name': user_name,
+                    'avatar': '',
+                    'email': '',
+                    'moderator': is_moderator
                 },
-                'aud': 'jitsi',
-                'iss': JITSI_APP_ID,
-                'sub': JITSI_DOMAIN,
-                'room': room_name,
-                'exp': int(time.time()) + 24 * 3600,
-                'nbf': int(time.time()) - 10
-            }
+                'group': ''
+            },
+            'aud': 'jitsi',
+            'iss': JITSI_APP_ID,
+            'sub': JITSI_DOMAIN,
+            'room': room_name,
+            'exp': int(time.time()) + 24 * 3600,  # 24 часа
+            'nbf': int(time.time()) - 10,
+            'moderator': is_moderator
+        }
 
-            return jwt.encode(payload, JITSI_APP_SECRET, algorithm='HS256')
-        except Exception as e:
-            logger.error(f"JWT generation error: {e}")
-
-    # Простой токен если JWT недоступен
-    import hashlib
-    token_data = f"{room_name}_{user_id}_{is_moderator}_{int(time.time())}"
-    return hashlib.md5(token_data.encode()).hexdigest()[:16]
+        token = jwt.encode(payload, JITSI_APP_SECRET, algorithm='HS256')
+        return token
+    except Exception as e:
+        logger.error(f"JWT token generation error: {e}")
+        return None
 
 
 @dp.message(Command("start"))
@@ -84,10 +88,10 @@ async def cmd_start(message: types.Message):
         [InlineKeyboardButton(text="🎥 Открыть VideoCall", web_app=WebAppInfo(url=WEBAPP_URL))]
     ])
     await message.answer(
-        "🎥 **VideoCall Bot на Jitsi Meet**\n\n"
-        "Качественные видеозвонки с мобильной оптимизацией!\n\n"
+        "🎥 **Telegram Call - Видеозвонки**\n\n"
+        "Безопасные видеозвонки через Jitsi Meet\n\n"
         "📋 **Команды:**\n"
-        "/create - создать звонок\n"
+        "/create - создать открытый звонок\n"
         "/list - ваши звонки\n"
         "/delete - удалить звонок",
         reply_markup=keyboard,
@@ -99,39 +103,34 @@ async def cmd_start(message: types.Message):
 async def cmd_create(message: types.Message):
     # Генерируем уникальный код и имя комнаты
     code = ''.join(random.choices(string.digits, k=6))
-    room_name = f"tg_{code}_{message.from_user.id}"
-
-    # Генерируем токен для организатора
-    room_token = generate_room_token(room_name, f"org_{message.from_user.id}", is_moderator=True)
+    room_name = f"telegram_call_{code}"
 
     calls_storage[code] = {
         'creator_id': message.from_user.id,
+        'creator_name': message.from_user.first_name,
         'room_name': room_name,
-        'room_token': room_token,
         'start_ts': int(datetime.now().timestamp()),
         'active': True,
         'participants': [],
-        'is_organizer': True
+        'is_public': True  # Делаем комнату публичной
     }
 
-    # Ссылка для организатора
-    org_jitsi_url = f"https://{JITSI_DOMAIN}/{room_name}"
-    if JWT_AVAILABLE and room_token:
-        org_jitsi_url += f"#jwt={room_token}"
+    jitsi_url = f"https://{JITSI_DOMAIN}/{room_name}"
 
     await message.answer(
         f"✅ **Звонок создан!**\n\n"
-        f"🔢 **Код:** `{code}`\n"
-        f"👑 **Вы - организатор**\n"
+        f"🔢 **Код для подключения:** `{code}`\n"
+        f"🌐 **Комната:** {room_name}\n"
+        f"👤 **Организатор:** {message.from_user.first_name}\n"
         f"⏰ **Создан:** {datetime.now().strftime('%H:%M')}\n\n"
         f"📱 **Участники подключаются так:**\n"
-        f"1. Нажимают кнопку ниже\n"
+        f"1. Нажимают кнопку 'Открыть VideoCall'\n"
         f"2. Вводят код `{code}`\n"
-        f"3. Нажимают 'Подключиться'",
+        f"3. Нажимают 'Присоединиться'",
         parse_mode="Markdown",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="🎥 Открыть VideoCall", web_app=WebAppInfo(url=f"{WEBAPP_URL}?code={code}"))],
-            [InlineKeyboardButton(text="🔗 Для организатора", url=org_jitsi_url)]
+            [InlineKeyboardButton(text="🔗 Прямая ссылка", url=jitsi_url)]
         ])
     )
 
@@ -145,58 +144,43 @@ async def cmd_list(message: types.Message):
         await message.answer("📭 **У вас нет созданных звонков**", parse_mode="Markdown")
         return
 
-    response = "📞 **Ваши звонки:**\n\n"
+    response = "📞 **Ваши активные звонки:**\n\n"
     for code, data in user_calls.items():
         start_time = datetime.fromtimestamp(data['start_ts']).strftime('%H:%M')
         participants = len(data['participants'])
-        status = "✅ Активен" if data['active'] else "❌ Завершен"
         response += f"🔢 **Код:** `{code}`\n"
         response += f"⏰ **Время:** {start_time}\n"
         response += f"👥 **Участники:** {participants}\n"
-        response += f"📊 **Статус:** {status}\n\n"
+        response += f"🌐 **Статус:** {'🔓 Открытый' if data['is_public'] else '🔒 Закрытый'}\n\n"
 
     await message.answer(response, parse_mode="Markdown")
 
 
-@dp.message(Command("delete"))
-async def cmd_delete(message: types.Message):
-    args = message.text.split()
-    if len(args) < 2:
-        await message.answer("❌ **Использование:**\n`/delete <код_звонка>`\n\nПример: `/delete 123456`",
-                             parse_mode="Markdown")
-        return
-
-    code = args[1]
-    if code in calls_storage and calls_storage[code]['creator_id'] == message.from_user.id:
-        del calls_storage[code]
-        await message.answer(f"✅ **Звонок {code} удален**", parse_mode="Markdown")
-    else:
-        await message.answer("❌ **Звонок не найден или у вас нет прав для его удаления**", parse_mode="Markdown")
-
-
-# FastAPI endpoints
-@app.get("/")
-async def read_root():
-    return FileResponse("static/index.html")
-
-
 @app.get("/call/{code}/info")
 async def call_info(code: str, request: Request):
-    """Информация о звонке"""
+    """Информация о звонке с генерацией токена для участника"""
     logger.info(f"Call info requested for code: {code}")
 
     if code in calls_storage:
         call = calls_storage[code]
 
-        # Простая проверка организатора по IP или другим параметрам
+        # Получаем информацию о пользователе
+        user_agent = request.headers.get('user-agent', '')
         client_ip = request.client.host
-        is_organizer = call.get('is_organizer', False)
+        user_id = f"user_{client_ip}_{int(time.time())}"
+
+        # Определяем тип пользователя (организатор или участник)
+        is_organizer = False  # В реальном приложении здесь была бы проверка авторизации
+
+        # Генерируем JWT токен для участника
+        user_name = f"Участник_{random.randint(1000, 9999)}"
+        jwt_token = generate_jwt_token(call['room_name'], user_id, user_name, is_moderator=is_organizer)
 
         response = {
             "exists": True,
             "room_name": call['room_name'],
-            "is_organizer": is_organizer,
-            "jwt_token": call['room_token'] if is_organizer and JWT_AVAILABLE else None,
+            "jwt_token": jwt_token,
+            "is_public": call.get('is_public', True),
             "active": call['active'],
             "participants_count": len(call['participants']),
             "jwt_available": JWT_AVAILABLE
@@ -222,19 +206,19 @@ async def join_call(code: str, request: Request):
         user_id = f"user_{client_ip}_{int(time.time())}"
 
         # Добавляем участника в историю
-        if user_id not in [p['user_id'] for p in call['participants']]:
-            call['participants'].append({
-                'user_id': user_id,
-                'joined_at': datetime.now().isoformat(),
-                'ip': client_ip
-            })
+        call['participants'].append({
+            'user_id': user_id,
+            'joined_at': datetime.now().isoformat(),
+            'ip': client_ip
+        })
 
         call['active'] = True
 
         response = {
             "success": True,
             "user_id": user_id,
-            "participants_count": len(call['participants'])
+            "participants_count": len(call['participants']),
+            "room_name": call['room_name']
         }
         logger.info(f"Join successful: {response}")
         return response
@@ -269,6 +253,7 @@ async def on_startup():
         await bot.set_webhook(webhook_url)
         logger.info(f"✅ Bot started successfully. Webhook: {webhook_url}")
         logger.info(f"✅ JWT available: {JWT_AVAILABLE}")
+        logger.info(f"✅ Jitsi domain: {JITSI_DOMAIN}")
     except Exception as e:
         logger.error(f"❌ Webhook setup failed: {e}")
 
