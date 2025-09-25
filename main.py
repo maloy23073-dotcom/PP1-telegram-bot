@@ -131,20 +131,18 @@ async def read_root():
     return FileResponse("static/index.html")
 
 
+# В вашем main.py убедитесь, что эндпоинты возвращают правильные данные:
+
 @app.get("/call/{code}/info")
 async def call_info(code: str):
-    """Информация о звонке для Jitsi"""
     if code in calls_storage:
         call = calls_storage[code]
-        jitsi_url = f"https://{JITSI_DOMAIN}/{call['room_name']}"
-
         return {
             "exists": True,
             "room_name": call['room_name'],
-            "jitsi_url": jitsi_url,
             "active": call['active']
         }
-    return {"exists": False}
+    return {"exists": False, "active": False}
 
 
 @app.post("/call/{code}/join")

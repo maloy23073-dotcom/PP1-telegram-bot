@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>VideoCall Bot — Jitsi Meet</title>
     <link rel="stylesheet" href="/static/style.css">
+    <script src="https://meet.jit.si/external_api.js"></script>
 </head>
 <body>
     <!-- Главная страница -->
@@ -20,12 +21,12 @@
 
             <div class="card">
                 <h2>Присоединиться к звонку</h2>
-                <p class="instruction">Введите код, полученный от организатора встречи</p>
+                <p class="instruction">Введите код, полученный от организатора</p>
 
                 <div class="input-group">
                     <input type="text" id="codeInput" maxlength="10" placeholder="Введите код" class="code-input">
                     <button id="joinBtn" class="primary-btn">
-                        <span>Подключиться к Jitsi</span>
+                        <span>Подключиться</span>
                     </button>
                 </div>
 
@@ -35,33 +36,6 @@
                     Создать новый звонок
                 </button>
             </div>
-
-            <div class="features">
-                <div class="feature">
-                    <span class="feature-icon">🔒</span>
-                    <span class="feature-text">Защищённое соединение</span>
-                </div>
-                <div class="feature">
-                    <span class="feature-icon">👥</span>
-                    <span class="feature-text">До 75 участников</span>
-                </div>
-                <div class="feature">
-                    <span class="feature-icon">📹</span>
-                    <span class="feature-text">HD качество</span>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Страница загрузки Jitsi -->
-    <div id="loadingPage" class="page">
-        <div class="container">
-            <div class="loading-content">
-                <div class="spinner"></div>
-                <h2>Подключение к Jitsi Meet...</h2>
-                <p id="loadingStatus">Инициализация видеозвонка</p>
-                <button id="cancelBtn" class="secondary-btn">Отмена</button>
-            </div>
         </div>
     </div>
 
@@ -69,8 +43,8 @@
     <div id="jitsiPage" class="page">
         <div id="jitsiContainer"></div>
         <div class="jitsi-controls">
-            <button id="leaveJitsiBtn" class="danger-btn">
-                🚪 Выйти из звонка
+            <button id="backBtn" class="danger-btn">
+                ← Назад
             </button>
         </div>
     </div>
@@ -78,8 +52,6 @@
     <!-- Статус -->
     <div id="status" class="status-message"></div>
 
-    <!-- Jitsi Meet API -->
-    <script src="https://meet.jit.si/external_api.js"></script>
     <script src="/static/app.js"></script>
 </body>
 </html>

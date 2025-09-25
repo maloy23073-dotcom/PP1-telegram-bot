@@ -164,6 +164,7 @@ body {
     cursor: pointer;
     transition: background 0.3s;
     width: 100%;
+    margin: 10px;
 }
 
 .danger-btn:hover {
@@ -194,73 +195,22 @@ body {
     margin-left: 10px;
 }
 
-.features {
-    display: flex;
-    justify-content: space-around;
-    gap: 10px;
-}
-
-.feature {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    text-align: center;
-}
-
-.feature-icon {
-    font-size: 1.2rem;
-    margin-bottom: 5px;
-}
-
-.feature-text {
-    font-size: 0.7rem;
-    color: var(--text-secondary);
-}
-
-/* Страница загрузки */
-.loading-content {
-    text-align: center;
-}
-
-.spinner {
-    width: 40px;
-    height: 40px;
-    border: 4px solid #333;
-    border-top: 4px solid var(--primary-color);
-    border-radius: 50%;
-    animation: spin 1s linear infinite;
-    margin: 0 auto 20px;
-}
-
-@keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-}
-
-.loading-content h2 {
-    margin-bottom: 10px;
-}
-
-#loadingStatus {
-    color: var(--text-secondary);
-    margin-bottom: 20px;
-}
-
 /* Jitsi страница */
 #jitsiPage {
     position: relative;
+    background: #000;
 }
 
 #jitsiContainer {
-    flex: 1;
+    width: 100%;
+    height: 100%;
     background: #000;
 }
 
 .jitsi-controls {
     position: absolute;
-    bottom: 20px;
-    left: 50%;
-    transform: translateX(-50%);
+    top: 10px;
+    left: 10px;
     z-index: 1000;
 }
 
@@ -278,16 +228,19 @@ body {
     display: none;
     max-width: 90%;
     text-align: center;
+    font-size: 0.9rem;
 }
 
-.status-message.show {
-    display: block;
-    animation: fadeInOut 3s ease-in-out;
+.status-message.error {
+    background: #e74c3c;
 }
 
-@keyframes fadeInOut {
-    0%, 100% { opacity: 0; transform: translateX(-50%) translateY(-10px); }
-    10%, 90% { opacity: 1; transform: translateX(-50%) translateY(0); }
+.status-message.success {
+    background: #27ae60;
+}
+
+.status-message.info {
+    background: #3498db;
 }
 
 /* Адаптивность */
@@ -304,12 +257,15 @@ body {
         flex-direction: column;
     }
 
-    .features {
-        flex-wrap: wrap;
+    .danger-btn {
+        padding: 10px 15px;
+        font-size: 0.9rem;
     }
+}
 
-    .feature {
-        flex: 1;
-        min-width: 80px;
-    }
+/* Важно: стили для Jitsi iframe */
+#jitsiContainer iframe {
+    border: none;
+    width: 100% !important;
+    height: 100% !important;
 }
