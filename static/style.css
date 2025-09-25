@@ -32,17 +32,16 @@ body {
 }
 
 .container {
-    max-width: 100%;
-    padding: 0;
+    width: 100%;
     height: 100%;
     display: flex;
     flex-direction: column;
 }
 
-/* Header стиль как в Telegram */
+/* Header */
 .header {
     background: #182533;
-    padding: 50px 20px 30px;
+    padding: 60px 20px 30px;
     text-align: center;
     border-bottom: 1px solid #2d4256;
 }
@@ -63,8 +62,6 @@ body {
     font-size: 24px;
     font-weight: 600;
     color: #ffffff;
-    background: none;
-    -webkit-text-fill-color: initial;
 }
 
 .subtitle {
@@ -73,12 +70,15 @@ body {
     line-height: 1.4;
 }
 
-/* Card стиль как в Telegram */
+/* Card */
 .card {
     background: transparent;
-    padding: 20px;
+    padding: 30px 20px;
     margin: 0;
     flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
 }
 
 .card h2 {
@@ -94,7 +94,6 @@ body {
     color: #8ba0b2;
     margin-bottom: 30px;
     font-size: 15px;
-    line-height: 1.4;
 }
 
 .input-group {
@@ -125,7 +124,6 @@ body {
     color: #6d7f8f;
 }
 
-/* Кнопки в стиле Telegram */
 .primary-btn {
     background: #2ea6ff;
     color: #ffffff;
@@ -137,7 +135,6 @@ body {
     cursor: pointer;
     transition: all 0.2s ease;
     min-height: 54px;
-    flex-shrink: 0;
 }
 
 .primary-btn:hover {
@@ -146,6 +143,12 @@ body {
 
 .primary-btn:active {
     transform: scale(0.98);
+}
+
+.primary-btn:disabled {
+    background: #1c3b5a;
+    cursor: not-allowed;
+    opacity: 0.7;
 }
 
 .secondary-btn {
@@ -158,7 +161,6 @@ body {
     font-weight: 500;
     cursor: pointer;
     transition: all 0.2s ease;
-    min-height: 50px;
 }
 
 .secondary-btn:hover {
@@ -213,11 +215,6 @@ body {
     left: 15px;
     z-index: 1000;
     backdrop-filter: blur(10px);
-    transition: all 0.2s ease;
-}
-
-.danger-btn:hover {
-    background: rgba(231, 76, 60, 1);
 }
 
 /* Status Messages */
@@ -235,7 +232,6 @@ body {
     max-width: 90%;
     text-align: center;
     font-size: 14px;
-    backdrop-filter: blur(10px);
 }
 
 .status-message.error {
@@ -253,19 +249,11 @@ body {
 /* Адаптация для мобильных */
 @media (max-width: 768px) {
     .header {
-        padding: 30px 20px 20px;
+        padding: 40px 20px 20px;
     }
 
-    .logo-icon {
-        font-size: 36px;
-    }
-
-    .logo h1 {
-        font-size: 20px;
-    }
-
-    .subtitle {
-        font-size: 14px;
+    .card {
+        padding: 20px;
     }
 
     .input-group {
@@ -275,39 +263,20 @@ body {
     .primary-btn, .secondary-btn {
         width: 100%;
     }
-
-    .code-input {
-        font-size: 16px;
-    }
 }
 
 /* Специальные стили для Telegram Mini App */
 @media (max-width: 480px) {
-    .container {
-        padding-bottom: env(safe-area-inset-bottom);
+    .header {
+        padding-top: max(40px, env(safe-area-inset-top));
     }
 
-    .header {
-        padding-top: max(30px, env(safe-area-inset-top));
+    .card {
+        padding-bottom: max(20px, env(safe-area-inset-bottom));
     }
 }
 
 /* Убираем скроллбар */
 ::-webkit-scrollbar {
     display: none;
-}
-
-/* Отключаем выделение текста */
-* {
-    -webkit-user-select: none;
-    -moz-user-select: none;
-    -ms-user-select: none;
-    user-select: none;
-}
-
-input {
-    -webkit-user-select: text;
-    -moz-user-select: text;
-    -ms-user-select: text;
-    user-select: text;
 }

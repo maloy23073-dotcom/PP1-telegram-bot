@@ -2,18 +2,36 @@ class JitsiVideoCall {
     constructor() {
         this.jitsiApi = null;
         this.isInitializing = false;
+        this.telegramWebApp = null;
         this.initializeElements();
+        this.initializeTelegramWebApp();
         this.attachEventListeners();
-        this.setupTelegramApp();
         this.log('App initialized');
     }
 
-    setupTelegramApp() {
+    initializeTelegramWebApp() {
+        // Инициализация Telegram WebApp
         if (window.Telegram && window.Telegram.WebApp) {
-            const webApp = window.Telegram.WebApp;
-            webApp.expand();
-            webApp.setBackgroundColor('#182533');
-            this.log('Telegram WebApp configured');
+            this.telegramWebApp = window.Telegram.WebApp;
+
+            // Настраиваем WebApp
+            this.telegramWebApp.expand();
+            this.telegramWebApp.enableClosingConfirmation();
+            this.telegramWebApp.setHeaderColor('#182533');
+            this.telegramWebApp.setBackgroundColor('#182533');
+
+            // Отключаем нативные жесты
+            this.telegramWebApp.disableVerticalSwipes();
+            this.telegramWebApp.disableHorizontalSwipes();
+
+            this.log('Telegram WebApp initialized');
+
+            // Показываем основную кнопку
+            this.telegramWebApp.MainButton.setText("Присоединиться к звонку");
+            this.telegramWebApp.MainButton.hide();
+
+        } else {
+            this.log('Telegram WebApp not detected - running in browser mode');
         }
     }
 
@@ -37,14 +55,44 @@ class JitsiVideoCall {
         this.createCallBtn.addEventListener('click', () => this.createCall());
         this.backBtn.addEventListener('click', () => this.leaveCall());
 
+        this.codeInput.addEventListener('input', () => this.onCodeInput());
         this.codeInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') this.joinCall();
         });
 
+        // Обработчик закрытия Telegram WebApp
+        if (this.telegramWebApp) {
+            this.telegramWebApp.onEvent('viewportChanged', this.onViewportChanged.bind(this));
+        }
+
+        // Автозаполнение кода из URL
         const urlParams = new URLSearchParams(window.location.search);
         const code = urlParams.get('code');
         if (code) {
             this.codeInput.value = code;
+            this.onCodeInput();
+        }
+    }
+
+    onCodeInput() {
+        // Обновляем состояние кнопки в зависимости от ввода
+        const code = this.codeInput.value.trim();
+        if (code.length === 6) {
+            this.joinBtn.disabled = false;
+            this.joinBtn.style.opacity = '1';
+        } else {
+            this.joinBtn.disabled = true;
+            this.joinBtn.style.opacity = '0.7';
+        }
+    }
+
+    onViewportChanged() {
+        // Адаптируем интерфейс при изменении размера окна
+        this.log('Viewport changed');
+        if (this.jitsiApi) {
+            setTimeout(() => {
+                this.jitsiApi.executeCommand('resize');
+            }, 100);
         }
     }
 
@@ -52,6 +100,22 @@ class JitsiVideoCall {
         this.welcomePage.style.display = 'none';
         this.jitsiPage.style.display = 'none';
         page.style.display = 'flex';
+
+        // Обновляем интерфейс Telegram WebApp
+        if (this.telegramWebApp) {
+            if (page === this.jitsiPage) {
+                this.telegramWebApp.MainButton.setText("Завершить звонок");
+                this.telegramWebApp.MainButton.onClick(this.leaveCall.bind(this));
+                this.telegramWebApp.MainButton.show();
+            } else {
+                this.telegramWebApp.MainButton.hide();
+            }
+
+            // Принудительно обновляем viewport
+            setTimeout(() => {
+                this.telegramWebApp.expand();
+            }, 50);
+        }
     }
 
     showStatus(message, type = 'info', duration = 3000) {
@@ -69,25 +133,19 @@ class JitsiVideoCall {
         this.isInitializing = true;
 
         const code = this.codeInput.value.trim();
-        if (!code) {
-            this.showStatus('Введите код звонка', 'error');
+        if (!code || code.length !== 6) {
+            this.showStatus('Введите 6-значный код', 'error');
             this.isInitializing = false;
             return;
         }
 
-        this.showStatus('Подключение...', 'info');
+        this.showStatus('Подключение к звонку...', 'info');
 
         try {
             const callInfo = await this.getCallInfo(code);
 
             if (!callInfo.exists) {
                 this.showStatus('Звонок не найден', 'error');
-                this.isInitializing = false;
-                return;
-            }
-
-            if (!callInfo.active) {
-                this.showStatus('Звонок завершен', 'error');
                 this.isInitializing = false;
                 return;
             }
@@ -116,12 +174,11 @@ class JitsiVideoCall {
     }
 
     startJitsiMeet(callInfo) {
-        this.log(`Starting Jitsi Meet - Room: ${callInfo.room_name}`);
+        this.log(`Starting Jitsi Meet: ${callInfo.room_name}`);
 
         try {
             this.jitsiContainer.innerHTML = '';
 
-            // Базовая конфигурация для открытых комнат
             const config = {
                 roomName: callInfo.room_name,
                 width: '100%',
@@ -133,11 +190,8 @@ class JitsiVideoCall {
                     enableClosePage: false,
                     startWithAudioMuted: false,
                     startWithVideoMuted: false,
-                    enableNoAudioDetection: true,
                     disableModeratorIndicator: true,
                     enableInsecureRoomNameWarning: false,
-                    disableInviteFunctions: false,
-                    enableLobbyChat: false
                 },
                 interfaceConfigOverwrite: {
                     TOOLBAR_BUTTONS: [
@@ -146,16 +200,13 @@ class JitsiVideoCall {
                     SHOW_JITSI_WATERMARK: false,
                     SHOW_WATERMARK_FOR_GUESTS: false,
                     SHOW_POWERED_BY: false,
-                    MOBILE_APP_PROMO: false
+                    MOBILE_APP_PROMO: false,
+                    VERTICAL_FILMSTRIP: true
                 }
             };
 
-            // Добавляем JWT токен если он есть
             if (callInfo.jwt_token) {
                 config.jwt = callInfo.jwt_token;
-                this.log('Using JWT token for authentication');
-            } else {
-                this.log('Using open room access');
             }
 
             this.jitsiApi = new JitsiMeetExternalAPI('meet.jit.si', config);
@@ -185,28 +236,14 @@ class JitsiVideoCall {
             this.log('New participant joined');
         });
 
-        // Обработка ошибок доступа
-        this.jitsiApi.addEventListener('connectionFailed', (event) => {
-            this.log('Connection failed: ' + JSON.stringify(event));
-            this.showStatus('Ошибка подключения к серверу', 'error');
-            this.isInitializing = false;
-        });
-
         this.jitsiApi.addEventListener('conferenceError', (error) => {
             this.log('Conference error: ' + JSON.stringify(error));
-
-            if (error.error.includes('not allowed') || error.error.includes('permission')) {
-                this.showStatus('Нет доступа к этому звонку', 'error');
-            } else {
-                this.showStatus('Ошибка конференции: ' + error.error, 'error');
-            }
+            this.showStatus('Ошибка подключения', 'error');
             this.isInitializing = false;
         });
 
-        // Таймаут
         setTimeout(() => {
             if (this.isInitializing) {
-                this.showStatus('Проверьте подключение к интернету', 'info');
                 this.showPage(this.jitsiPage);
                 this.isInitializing = false;
             }
@@ -228,19 +265,38 @@ class JitsiVideoCall {
         this.jitsiContainer.innerHTML = '';
         this.showPage(this.welcomePage);
         this.isInitializing = false;
+
+        // Закрываем WebApp если это Telegram
+        if (this.telegramWebApp) {
+            setTimeout(() => {
+                this.telegramWebApp.close();
+            }, 1000);
+        }
     }
 
     createCall() {
-        this.showStatus('Используйте команду /create в боте Telegram', 'info');
+        if (this.telegramWebApp) {
+            this.telegramWebApp.showPopup({
+                title: 'Создание звонка',
+                message: 'Используйте команду /create в чате с ботом',
+                buttons: [{ type: 'ok' }]
+            });
+        } else {
+            this.showStatus('Используйте команду /create в боте Telegram', 'info');
+        }
     }
 }
 
-// Инициализация
+// Инициализация приложения
 document.addEventListener('DOMContentLoaded', () => {
     try {
         if (typeof JitsiMeetExternalAPI === 'undefined') {
             throw new Error('Jitsi Meet API не загружен');
         }
+
+        // Устанавливаем стиль как в Telegram
+        document.documentElement.style.backgroundColor = '#182533';
+        document.body.style.backgroundColor = '#182533';
 
         window.videoCallApp = new JitsiVideoCall();
 
@@ -248,11 +304,10 @@ document.addEventListener('DOMContentLoaded', () => {
         console.error('Initialization error:', error);
         document.body.innerHTML = `
             <div style="padding: 40px 20px; text-align: center; color: white; background: #182533; height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center;">
-                <div style="font-size: 48px; margin-bottom: 20px;">❌</div>
                 <h2 style="margin-bottom: 10px;">Ошибка загрузки</h2>
                 <p style="color: #8ba0b2; margin-bottom: 30px;">${error.message}</p>
                 <button onclick="location.reload()" style="padding: 12px 24px; background: #2ea6ff; color: white; border: none; border-radius: 8px; cursor: pointer;">
-                    Попробовать снова
+                    Обновить страницу
                 </button>
             </div>
         `;

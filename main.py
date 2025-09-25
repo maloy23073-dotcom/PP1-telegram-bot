@@ -51,7 +51,6 @@ def generate_jwt_token(room_name, user_id, user_name="Participant", is_moderator
         return None
 
     try:
-        # Используем стандартные настройки для Jitsi
         JITSI_APP_ID = "telegram-bot"
         JITSI_APP_SECRET = "your-secret-key-change-in-production"
 
@@ -60,19 +59,15 @@ def generate_jwt_token(room_name, user_id, user_name="Participant", is_moderator
                 'user': {
                     'id': user_id,
                     'name': user_name,
-                    'avatar': '',
-                    'email': '',
                     'moderator': is_moderator
-                },
-                'group': ''
+                }
             },
             'aud': 'jitsi',
             'iss': JITSI_APP_ID,
             'sub': JITSI_DOMAIN,
             'room': room_name,
-            'exp': int(time.time()) + 24 * 3600,  # 24 часа
+            'exp': int(time.time()) + 24 * 3600,
             'nbf': int(time.time()) - 10,
-            'moderator': is_moderator
         }
 
         token = jwt.encode(payload, JITSI_APP_SECRET, algorithm='HS256')
@@ -91,9 +86,10 @@ async def cmd_start(message: types.Message):
         "🎥 **Telegram Call - Видеозвонки**\n\n"
         "Безопасные видеозвонки через Jitsi Meet\n\n"
         "📋 **Команды:**\n"
-        "/create - создать открытый звонок\n"
-        "/list - ваши звонки\n"
-        "/delete - удалить звонок",
+        "/create - создать звонок\n"
+        "/list - список звонков\n"
+        "/delete - удалить звонок\n\n"
+        "Нажмите кнопку ниже чтобы открыть видеозвонок:",
         reply_markup=keyboard,
         parse_mode="Markdown"
     )
@@ -101,7 +97,6 @@ async def cmd_start(message: types.Message):
 
 @dp.message(Command("create"))
 async def cmd_create(message: types.Message):
-    # Генерируем уникальный код и имя комнаты
     code = ''.join(random.choices(string.digits, k=6))
     room_name = f"telegram_call_{code}"
 
@@ -112,7 +107,7 @@ async def cmd_create(message: types.Message):
         'start_ts': int(datetime.now().timestamp()),
         'active': True,
         'participants': [],
-        'is_public': True  # Делаем комнату публичной
+        'is_public': True
     }
 
     jitsi_url = f"https://{JITSI_DOMAIN}/{room_name}"
@@ -120,13 +115,9 @@ async def cmd_create(message: types.Message):
     await message.answer(
         f"✅ **Звонок создан!**\n\n"
         f"🔢 **Код для подключения:** `{code}`\n"
-        f"🌐 **Комната:** {room_name}\n"
         f"👤 **Организатор:** {message.from_user.first_name}\n"
         f"⏰ **Создан:** {datetime.now().strftime('%H:%M')}\n\n"
-        f"📱 **Участники подключаются так:**\n"
-        f"1. Нажимают кнопку 'Открыть VideoCall'\n"
-        f"2. Вводят код `{code}`\n"
-        f"3. Нажимают 'Присоединиться'",
+        f"📱 **Участники подключаются через Mini App**",
         parse_mode="Markdown",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="🎥 Открыть VideoCall", web_app=WebAppInfo(url=f"{WEBAPP_URL}?code={code}"))],
@@ -141,7 +132,8 @@ async def cmd_list(message: types.Message):
                   if data['creator_id'] == message.from_user.id}
 
     if not user_calls:
-        await message.answer("📭 **У вас нет созданных звонков**", parse_mode="Markdown")
+        await message.answer("📭 **У вас нет созданных звонков**\n\nИспользуйте /create чтобы создать первый звонок",
+                             parse_mode="Markdown")
         return
 
     response = "📞 **Ваши активные звонки:**\n\n"
@@ -150,62 +142,102 @@ async def cmd_list(message: types.Message):
         participants = len(data['participants'])
         response += f"🔢 **Код:** `{code}`\n"
         response += f"⏰ **Время:** {start_time}\n"
-        response += f"👥 **Участники:** {participants}\n"
-        response += f"🌐 **Статус:** {'🔓 Открытый' if data['is_public'] else '🔒 Закрытый'}\n\n"
+        response += f"👥 **Участники:** {participants}\n\n"
 
     await message.answer(response, parse_mode="Markdown")
 
 
+@dp.message(Command("delete"))
+async def cmd_delete(message: types.Message):
+    # Получаем аргументы команды
+    args = message.text.split()
+
+    if len(args) < 2:
+        # Если код не указан, показываем список звонков для удаления
+        user_calls = {code: data for code, data in calls_storage.items()
+                      if data['creator_id'] == message.from_user.id}
+
+        if not user_calls:
+            await message.answer("❌ **У вас нет звонков для удаления**", parse_mode="Markdown")
+            return
+
+        # Создаем клавиатуру с кодами для удаления
+        keyboard = []
+        for code in user_calls.keys():
+            keyboard.append([InlineKeyboardButton(text=f"❌ Удалить звонок {code}", callback_data=f"delete_{code}")])
+
+        markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+        await message.answer(
+            "🗑 **Выберите звонок для удаления:**\n\n"
+            "Или используйте команду: `/delete <код>`\n\n"
+            "Пример: `/delete 123456`",
+            reply_markup=markup,
+            parse_mode="Markdown"
+        )
+        return
+
+    code = args[1]
+
+    # Проверяем валидность кода
+    if not code.isdigit() or len(code) != 6:
+        await message.answer("❌ **Код должен состоять из 6 цифр**\n\nПример: `/delete 123456`", parse_mode="Markdown")
+        return
+
+    # Удаляем звонок
+    if code in calls_storage and calls_storage[code]['creator_id'] == message.from_user.id:
+        room_name = calls_storage[code]['room_name']
+        del calls_storage[code]
+        await message.answer(f"✅ **Звонок {code} удален**\n\nКомната: `{room_name}`", parse_mode="Markdown")
+    else:
+        await message.answer("❌ **Звонок не найден или у вас нет прав для его удаления**", parse_mode="Markdown")
+
+
+# Обработчик callback кнопок для удаления
+@dp.callback_query(lambda c: c.data.startswith('delete_'))
+async def process_delete_callback(callback_query: types.CallbackQuery):
+    code = callback_query.data.replace('delete_', '')
+
+    if code in calls_storage and calls_storage[code]['creator_id'] == callback_query.from_user.id:
+        room_name = calls_storage[code]['room_name']
+        del calls_storage[code]
+        await callback_query.message.edit_text(
+            f"✅ **Звонок {code} удален**\n\nКомната: `{room_name}`",
+            parse_mode="Markdown"
+        )
+    else:
+        await callback_query.answer("❌ Звонок не найден", show_alert=True)
+
+
 @app.get("/call/{code}/info")
 async def call_info(code: str, request: Request):
-    """Информация о звонке с генерацией токена для участника"""
-    logger.info(f"Call info requested for code: {code}")
-
     if code in calls_storage:
         call = calls_storage[code]
-
-        # Получаем информацию о пользователе
-        user_agent = request.headers.get('user-agent', '')
         client_ip = request.client.host
         user_id = f"user_{client_ip}_{int(time.time())}"
-
-        # Определяем тип пользователя (организатор или участник)
-        is_organizer = False  # В реальном приложении здесь была бы проверка авторизации
-
-        # Генерируем JWT токен для участника
         user_name = f"Участник_{random.randint(1000, 9999)}"
-        jwt_token = generate_jwt_token(call['room_name'], user_id, user_name, is_moderator=is_organizer)
+
+        jwt_token = generate_jwt_token(call['room_name'], user_id, user_name)
 
         response = {
             "exists": True,
             "room_name": call['room_name'],
             "jwt_token": jwt_token,
-            "is_public": call.get('is_public', True),
             "active": call['active'],
-            "participants_count": len(call['participants']),
-            "jwt_available": JWT_AVAILABLE
+            "participants_count": len(call['participants'])
         }
-        logger.info(f"Call found: {response}")
         return response
 
-    response = {"exists": False, "active": False}
-    logger.info(f"Call not found: {response}")
-    return response
+    return {"exists": False, "active": False}
 
 
 @app.post("/call/{code}/join")
 async def join_call(code: str, request: Request):
-    """Регистрация участника звонка"""
-    logger.info(f"Join call requested for code: {code}")
-
     if code in calls_storage:
         call = calls_storage[code]
         client_ip = request.client.host
-
-        # Генерируем ID пользователя
         user_id = f"user_{client_ip}_{int(time.time())}"
 
-        # Добавляем участника в историю
         call['participants'].append({
             'user_id': user_id,
             'joined_at': datetime.now().isoformat(),
@@ -214,18 +246,13 @@ async def join_call(code: str, request: Request):
 
         call['active'] = True
 
-        response = {
+        return {
             "success": True,
             "user_id": user_id,
-            "participants_count": len(call['participants']),
-            "room_name": call['room_name']
+            "participants_count": len(call['participants'])
         }
-        logger.info(f"Join successful: {response}")
-        return response
 
-    response = {"success": False, "message": "Call not found"}
-    logger.info(f"Join failed: {response}")
-    return response
+    return {"success": False, "message": "Call not found"}
 
 
 # Webhook endpoint для Telegram
@@ -243,7 +270,7 @@ async def webhook(request: Request):
 
 @app.get("/ping")
 async def ping():
-    return {"ok": True, "jwt_available": JWT_AVAILABLE}
+    return {"ok": True}
 
 
 @app.on_event("startup")
@@ -252,8 +279,6 @@ async def on_startup():
     try:
         await bot.set_webhook(webhook_url)
         logger.info(f"✅ Bot started successfully. Webhook: {webhook_url}")
-        logger.info(f"✅ JWT available: {JWT_AVAILABLE}")
-        logger.info(f"✅ Jitsi domain: {JITSI_DOMAIN}")
     except Exception as e:
         logger.error(f"❌ Webhook setup failed: {e}")
 
