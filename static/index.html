@@ -3,51 +3,44 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Telegram Call</title>
     <meta name="theme-color" content="#182533">
+    <title>Telegram Call</title>
     <link rel="stylesheet" href="/static/style.css">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://meet.jit.si/external_api.js"></script>
 </head>
 <body>
-    <!-- Главная страница -->
-    <div id="welcomePage" class="page">
+    <div id="welcomePage" class="page active">
         <div class="container">
             <div class="header">
                 <div class="logo">
                     <div class="logo-icon">📞</div>
                     <h1>Telegram Call</h1>
                 </div>
-                <p class="subtitle">Безопасные видеозвонки через Jitsi Meet</p>
+                <p class="subtitle">Безопасные видеозвонки</p>
             </div>
 
             <div class="card">
                 <h2>Присоединиться к звонку</h2>
-                <p class="instruction">Введите 6-значный код, полученный от организатора</p>
+                <p class="instruction">Введите 6-значный код</p>
 
                 <div class="input-group">
                     <input type="text" id="codeInput" maxlength="6" placeholder="000000" class="code-input">
-                    <button id="joinBtn" class="primary-btn">
-                        Присоединиться
-                    </button>
+                    <button id="joinBtn" class="primary-btn">Присоединиться</button>
                 </div>
 
                 <div class="divider">или</div>
 
-                <button id="createCallBtn" class="secondary-btn">
-                    Создать новый звонок
-                </button>
+                <button id="createCallBtn" class="secondary-btn">Создать звонок</button>
             </div>
         </div>
     </div>
 
-    <!-- Страница видеозвонка -->
     <div id="jitsiPage" class="page">
         <div id="jitsiContainer"></div>
         <button id="backBtn" class="danger-btn">Завершить</button>
     </div>
 
-    <!-- Статус -->
     <div id="status" class="status-message"></div>
 
     <script src="/static/app.js"></script>

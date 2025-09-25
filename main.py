@@ -3,14 +3,14 @@ import logging
 import random
 import string
 import time
-import jwt
 from datetime import datetime
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiogram.types import WebAppInfo, InlineKeyboardButton, InlineKeyboardMarkup
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.templating import Jinja2Templates
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -25,56 +25,16 @@ if not BOT_TOKEN:
 if not WEBAPP_URL:
     raise ValueError("WEBAPP_URL environment variable is required!")
 
-# Проверяем наличие JWT
-try:
-    import jwt
-
-    JWT_AVAILABLE = True
-    logger.info("✅ JWT module is available")
-except ImportError:
-    JWT_AVAILABLE = False
-    logger.warning("⚠️ JWT module not available - using open rooms")
-
 # Инициализация
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
-app = FastAPI()
+app = FastAPI(title="Telegram VideoCall Bot")
+
+# Монтируем статические файлы
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # Хранилище звонков
 calls_storage = {}
-
-
-def generate_jwt_token(room_name, user_id, user_name="Participant", is_moderator=False):
-    """Генерация JWT токена для Jitsi Meet"""
-    if not JWT_AVAILABLE:
-        return None
-
-    try:
-        JITSI_APP_ID = "telegram-bot"
-        JITSI_APP_SECRET = "your-secret-key-change-in-production"
-
-        payload = {
-            'context': {
-                'user': {
-                    'id': user_id,
-                    'name': user_name,
-                    'moderator': is_moderator
-                }
-            },
-            'aud': 'jitsi',
-            'iss': JITSI_APP_ID,
-            'sub': JITSI_DOMAIN,
-            'room': room_name,
-            'exp': int(time.time()) + 24 * 3600,
-            'nbf': int(time.time()) - 10,
-        }
-
-        token = jwt.encode(payload, JITSI_APP_SECRET, algorithm='HS256')
-        return token
-    except Exception as e:
-        logger.error(f"JWT token generation error: {e}")
-        return None
 
 
 @dp.message(Command("start"))
@@ -149,11 +109,9 @@ async def cmd_list(message: types.Message):
 
 @dp.message(Command("delete"))
 async def cmd_delete(message: types.Message):
-    # Получаем аргументы команды
     args = message.text.split()
 
     if len(args) < 2:
-        # Если код не указан, показываем список звонков для удаления
         user_calls = {code: data for code, data in calls_storage.items()
                       if data['creator_id'] == message.from_user.id}
 
@@ -161,7 +119,6 @@ async def cmd_delete(message: types.Message):
             await message.answer("❌ **У вас нет звонков для удаления**", parse_mode="Markdown")
             return
 
-        # Создаем клавиатуру с кодами для удаления
         keyboard = []
         for code in user_calls.keys():
             keyboard.append([InlineKeyboardButton(text=f"❌ Удалить звонок {code}", callback_data=f"delete_{code}")])
@@ -179,12 +136,10 @@ async def cmd_delete(message: types.Message):
 
     code = args[1]
 
-    # Проверяем валидность кода
     if not code.isdigit() or len(code) != 6:
         await message.answer("❌ **Код должен состоять из 6 цифр**\n\nПример: `/delete 123456`", parse_mode="Markdown")
         return
 
-    # Удаляем звонок
     if code in calls_storage and calls_storage[code]['creator_id'] == message.from_user.id:
         room_name = calls_storage[code]['room_name']
         del calls_storage[code]
@@ -193,7 +148,6 @@ async def cmd_delete(message: types.Message):
         await message.answer("❌ **Звонок не найден или у вас нет прав для его удаления**", parse_mode="Markdown")
 
 
-# Обработчик callback кнопок для удаления
 @dp.callback_query(lambda c: c.data.startswith('delete_'))
 async def process_delete_callback(callback_query: types.CallbackQuery):
     code = callback_query.data.replace('delete_', '')
@@ -209,20 +163,25 @@ async def process_delete_callback(callback_query: types.CallbackQuery):
         await callback_query.answer("❌ Звонок не найден", show_alert=True)
 
 
+# Основной маршрут для Mini App
+@app.get("/", response_class=HTMLResponse)
+async def read_root():
+    try:
+        with open("static/index.html", "r", encoding="utf-8") as f:
+            return HTMLResponse(content=f.read())
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Index file not found")
+
+
+# API endpoints
 @app.get("/call/{code}/info")
-async def call_info(code: str, request: Request):
+async def call_info(code: str):
     if code in calls_storage:
         call = calls_storage[code]
-        client_ip = request.client.host
-        user_id = f"user_{client_ip}_{int(time.time())}"
-        user_name = f"Участник_{random.randint(1000, 9999)}"
-
-        jwt_token = generate_jwt_token(call['room_name'], user_id, user_name)
 
         response = {
             "exists": True,
             "room_name": call['room_name'],
-            "jwt_token": jwt_token,
             "active": call['active'],
             "participants_count": len(call['participants'])
         }
@@ -236,6 +195,7 @@ async def join_call(code: str, request: Request):
     if code in calls_storage:
         call = calls_storage[code]
         client_ip = request.client.host
+
         user_id = f"user_{client_ip}_{int(time.time())}"
 
         call['participants'].append({
@@ -255,7 +215,7 @@ async def join_call(code: str, request: Request):
     return {"success": False, "message": "Call not found"}
 
 
-# Webhook endpoint для Telegram
+# Webhook для Telegram
 @app.post("/webhook")
 async def webhook(request: Request):
     try:
@@ -268,6 +228,12 @@ async def webhook(request: Request):
         return {"status": "error", "message": str(e)}
 
 
+# Health check
+@app.get("/health")
+async def health_check():
+    return {"status": "ok", "timestamp": datetime.now().isoformat()}
+
+
 @app.get("/ping")
 async def ping():
     return {"ok": True}
@@ -278,7 +244,9 @@ async def on_startup():
     webhook_url = f"{WEBAPP_URL}/webhook"
     try:
         await bot.set_webhook(webhook_url)
-        logger.info(f"✅ Bot started successfully. Webhook: {webhook_url}")
+        logger.info(f"✅ Bot started successfully")
+        logger.info(f"✅ Webhook: {webhook_url}")
+        logger.info(f"✅ Mini App URL: {WEBAPP_URL}")
     except Exception as e:
         logger.error(f"❌ Webhook setup failed: {e}")
 
