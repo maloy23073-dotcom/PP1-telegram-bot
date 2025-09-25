@@ -1,699 +1,315 @@
-/* static/style.css - Telegram-like theme with two pages */
 :root {
-  --tg-bg: #0f0f0f;
-  --tg-secondary-bg: #1f1f1f;
-  --tg-card-bg: #1e1e1e;
-  --tg-text: #ffffff;
-  --tg-secondary-text: #999999;
-  --tg-accent: #2aabee;
-  --tg-accent-hover: #229ed9;
-  --tg-danger: #e64d4d;
-  --tg-success: #5ec16a;
-  --tg-warning: #f0b90b;
-  --tg-radius: 12px;
-  --tg-radius-sm: 8px;
-  --tg-shadow: 0 2px 16px rgba(0, 0, 0, 0.15);
-  --tg-transition: all 0.2s ease;
+    --primary-color: #2b87db;
+    --primary-dark: #1a6dc1;
+    --danger-color: #e74c3c;
+    --success-color: #27ae60;
+    --bg-color: #0f0f0f;
+    --card-bg: #1a1a1a;
+    --text-color: #ffffff;
+    --text-secondary: #b0b0b0;
+    --border-radius: 12px;
+    --shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
 }
 
 * {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-  background: var(--tg-bg);
-  color: var(--tg-text);
-  line-height: 1.4;
-  height: 100vh;
-  overflow: hidden;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg-color);
+    color: var(--text-color);
+    line-height: 1.5;
+    height: 100vh;
+    overflow: hidden;
 }
 
-/* Page management */
 .page {
-  display: none;
-  height: 100vh;
-  overflow-y: auto;
+    display: none;
+    height: 100vh;
+    flex-direction: column;
 }
 
 .page.active {
-  display: block;
-}
-
-/* Welcome page styles */
-#welcomePage {
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 100vh;
+    display: flex;
 }
 
 .container {
-  width: 100%;
-  max-width: 400px;
-  margin: 0 auto;
+    max-width: 400px;
+    margin: 0 auto;
+    padding: 20px;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
 }
 
 .header {
-  text-align: center;
-  margin-bottom: 32px;
+    text-align: center;
+    margin-bottom: 30px;
 }
 
 .logo {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.logo-icon {
+    font-size: 2rem;
 }
 
 .logo h1 {
-  font-size: 28px;
-  font-weight: 700;
-  background: linear-gradient(135deg, var(--tg-accent), #8774e1);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+    font-size: 1.5rem;
+    background: linear-gradient(135deg, var(--primary-color), #9b59b6);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
 }
 
 .subtitle {
-  color: var(--tg-secondary-text);
-  font-size: 16px;
-}
-
-.features {
-  display: flex;
-  justify-content: center;
-  gap: 24px;
-  margin-bottom: 32px;
-  flex-wrap: wrap;
-}
-
-.feature {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-}
-
-.feature-icon {
-  font-size: 24px;
-  width: 50px;
-  height: 50px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--tg-card-bg);
-  border-radius: 50%;
-}
-
-.feature-text {
-  font-size: 12px;
-  color: var(--tg-secondary-text);
-  text-align: center;
-  max-width: 80px;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
 }
 
 .card {
-  background: var(--tg-card-bg);
-  padding: 24px;
-  border-radius: var(--tg-radius);
-  box-shadow: var(--tg-shadow);
-  margin-bottom: 24px;
+    background: var(--card-bg);
+    padding: 25px;
+    border-radius: var(--border-radius);
+    box-shadow: var(--shadow);
+    margin-bottom: 20px;
 }
 
 .card h2 {
-  font-size: 20px;
-  margin-bottom: 8px;
-  text-align: center;
+    text-align: center;
+    margin-bottom: 10px;
+    font-size: 1.3rem;
 }
 
 .instruction {
-  color: var(--tg-secondary-text);
-  text-align: center;
-  margin-bottom: 20px;
-  font-size: 14px;
+    text-align: center;
+    color: var(--text-secondary);
+    margin-bottom: 20px;
+    font-size: 0.9rem;
 }
 
 .input-group {
-  display: flex;
-  gap: 12px;
-  margin-bottom: 20px;
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
 }
 
-input#code {
-  flex: 1;
-  padding: 16px;
-  font-size: 18px;
-  text-align: center;
-  background: rgba(255, 255, 255, 0.08);
-  border: 2px solid rgba(255, 255, 255, 0.12);
-  border-radius: var(--tg-radius-sm);
-  color: var(--tg-text);
-  transition: var(--tg-transition);
+.code-input {
+    flex: 1;
+    padding: 12px 15px;
+    border: 2px solid #333;
+    border-radius: var(--border-radius);
+    background: #2a2a2a;
+    color: var(--text-color);
+    font-size: 1rem;
+    transition: border-color 0.3s;
 }
 
-input#code:focus {
-  outline: none;
-  border-color: var(--tg-accent);
+.code-input:focus {
+    outline: none;
+    border-color: var(--primary-color);
 }
 
-button {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 16px 20px;
-  border-radius: var(--tg-radius-sm);
-  border: none;
-  font-weight: 600;
-  font-size: 16px;
-  cursor: pointer;
-  transition: var(--tg-transition);
+.primary-btn {
+    background: var(--primary-color);
+    color: white;
+    border: none;
+    padding: 12px 20px;
+    border-radius: var(--border-radius);
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.3s;
+    white-space: nowrap;
 }
 
-button.primary {
-  background: var(--tg-accent);
-  color: white;
+.primary-btn:hover {
+    background: var(--primary-dark);
 }
 
-button.primary:hover {
-  background: var(--tg-accent-hover);
+.secondary-btn {
+    background: transparent;
+    color: var(--text-secondary);
+    border: 2px solid var(--text-secondary);
+    padding: 12px 20px;
+    border-radius: var(--border-radius);
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s;
+    width: 100%;
 }
 
-button.secondary {
-  background: transparent;
-  border: 2px solid var(--tg-secondary-text);
-  color: var(--tg-secondary-text);
+.secondary-btn:hover {
+    border-color: var(--text-color);
+    color: var(--text-color);
 }
 
-button.secondary:hover {
-  border-color: var(--tg-text);
-  color: var(--tg-text);
+.danger-btn {
+    background: var(--danger-color);
+    color: white;
+    border: none;
+    padding: 12px 20px;
+    border-radius: var(--border-radius);
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.3s;
+    width: 100%;
+}
+
+.danger-btn:hover {
+    background: #c0392b;
 }
 
 .divider {
-  display: flex;
-  align-items: center;
-  text-align: center;
-  margin: 20px 0;
-  color: var(--tg-secondary-text);
-  font-size: 14px;
+    display: flex;
+    align-items: center;
+    margin: 20px 0;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
 }
 
 .divider::before,
 .divider::after {
-  content: '';
-  flex: 1;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: #333;
 }
 
 .divider::before {
-  margin-right: 10px;
+    margin-right: 10px;
 }
 
 .divider::after {
-  margin-left: 10px;
+    margin-left: 10px;
 }
 
-.instructions {
-  background: var(--tg-card-bg);
-  padding: 24px;
-  border-radius: var(--tg-radius);
-  box-shadow: var(--tg-shadow);
+.features {
+    display: flex;
+    justify-content: space-around;
+    gap: 10px;
 }
 
-.instructions h3 {
-  font-size: 18px;
-  margin-bottom: 16px;
-  text-align: center;
+.feature {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
 }
 
-.instructions ol {
-  padding-left: 20px;
-  color: var(--tg-secondary-text);
+.feature-icon {
+    font-size: 1.2rem;
+    margin-bottom: 5px;
 }
 
-.instructions li {
-  margin-bottom: 8px;
-  font-size: 14px;
+.feature-text {
+    font-size: 0.7rem;
+    color: var(--text-secondary);
 }
 
-/* Call page styles */
-#callPage {
-  display: flex;
-  flex-direction: column;
-  height: 100vh;
-  background: var(--tg-bg);
+/* Страница загрузки */
+.loading-content {
+    text-align: center;
 }
 
-.call-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 16px;
-  background: var(--tg-card-bg);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.call-info {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.call-id {
-  font-size: 14px;
-  color: var(--tg-secondary-text);
-}
-
-.call-timer {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--tg-success);
-}
-
-.icon-btn {
-  background: transparent;
-  border: none;
-  color: var(--tg-text);
-  padding: 8px;
-  border-radius: var(--tg-radius-sm);
-  cursor: pointer;
-}
-
-.icon-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
-}
-
-.videos-container {
-  flex: 1;
-  position: relative;
-  padding: 16px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-}
-
-.remote-videos {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 16px;
-  width: 100%;
-  height: 100%;
-}
-
-#localVideo {
-  position: absolute;
-  top: 16px;
-  right: 16px;
-  width: 120px;
-  height: 90px;
-  border-radius: var(--tg-radius-sm);
-  background: var(--tg-card-bg);
-  border: 2px solid var(--tg-accent);
-  z-index: 10;
-}
-
-.call-controls {
-  display: flex;
-  justify-content: center;
-  gap: 16px;
-  padding: 16px;
-  background: var(--tg-card-bg);
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.control-btn {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  background: rgba(255, 255, 255, 0.1);
-  border: none;
-  color: var(--tg-text);
-  padding: 12px;
-  border-radius: var(--tg-radius-sm);
-  cursor: pointer;
-  transition: var(--tg-transition);
-  min-width: 80px;
-}
-
-.control-btn:hover {
-  background: rgba(255, 255, 255, 0.2);
-}
-
-.control-btn.danger {
-  background: var(--tg-danger);
-}
-
-.control-btn.danger:hover {
-  background: #d43c3c;
-}
-
-.control-btn span {
-  font-size: 12px;
-}
-
-.connection-status {
-  position: absolute;
-  bottom: 80px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: rgba(0, 0, 0, 0.7);
-  color: white;
-  padding: 8px 16px;
-  border-radius: var(--tg-radius-sm);
-  font-size: 14px;
-  z-index: 100;
-}
-
-/* Animations */
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(20px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.card, .instructions {
-  animation: fadeIn 0.3s ease-out;
-}
-
-@keyframes pulse {
-  0% { box-shadow: 0 0 0 0 rgba(42, 171, 238, 0.4); }
-  70% { box-shadow: 0 0 0 10px rgba(42, 171, 238, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(42, 171, 238, 0); }
-}
-
-#joinBtn {
-  animation: pulse 2s infinite;
-}
-
-/* Responsive design */
-@media (max-width: 768px) {
-  .features {
-    gap: 16px;
-  }
-
-  .feature-icon {
+.spinner {
     width: 40px;
     height: 40px;
-    font-size: 18px;
-  }
-
-  .feature-text {
-    font-size: 11px;
-    max-width: 70px;
-  }
-
-  .input-group {
-    flex-direction: column;
-  }
-
-  .call-controls {
-    gap: 8px;
-  }
-
-  .control-btn {
-    min-width: 60px;
-    padding: 8px;
-  }
-
-  .control-btn span {
-    font-size: 10px;
-  }
-
-  #localVideo {
-    width: 80px;
-    height: 60px;
-    top: 8px;
-    right: 8px;
-  }
+    border: 4px solid #333;
+    border-top: 4px solid var(--primary-color);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin: 0 auto 20px;
 }
 
-/* Scrollbar styling */
-::-webkit-scrollbar {
-  width: 6px;
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
 }
 
-::-webkit-scrollbar-track {
-  background: var(--tg-secondary-bg);
+.loading-content h2 {
+    margin-bottom: 10px;
 }
 
-::-webkit-scrollbar-thumb {
-  background: var(--tg-accent);
-  border-radius: 3px;
+#loadingStatus {
+    color: var(--text-secondary);
+    margin-bottom: 20px;
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background: var(--tg-accent-hover);
-}
-/* Дополнительные стили для статуса и анимаций */
-.connection-status.success {
-    background: var(--tg-success);
+/* Jitsi страница */
+#jitsiPage {
+    position: relative;
 }
 
-.connection-status.error {
-    background: var(--tg-danger);
-}
-
-.connection-status.info {
-    background: var(--tg-warning);
-    color: black;
-}
-
-.control-btn.muted {
-    background: var(--tg-danger) !important;
-    opacity: 0.7;
-}
-
-/* Анимация появления страницы */
-.page {
-    transition: opacity 0.3s ease;
-}
-
-.page:not(.active) {
-    display: none;
-}
-
-.page.active {
-    display: block;
-    animation: fadeIn 0.3s ease;
-}
-
-@keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
-}
-
-/* Исправление для input */
-input#codeInput {
+#jitsiContainer {
     flex: 1;
-    padding: 16px;
-    font-size: 18px;
-    text-align: center;
-    background: rgba(255, 255, 255, 0.08);
-    border: 2px solid rgba(255, 255, 255, 0.12);
-    border-radius: var(--tg-radius-sm);
-    color: var(--tg-text);
-    transition: var(--tg-transition);
+    background: #000;
 }
 
-input#codeInput:focus {
-    outline: none;
-    border-color: var(--tg-accent);
+.jitsi-controls {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1000;
 }
 
-/* Исправление отображения видео */
-video {
-    object-fit: cover;
-    border-radius: var(--tg-radius-sm);
-}
-
-#localVideo {
-    transform: scaleX(-1); /* Зеркальное отображение для естественного вида */
-}
-
-/* Улучшение отображения статуса */
-.connection-status {
-    display: none;
+/* Статус сообщения */
+.status-message {
     position: fixed;
     top: 20px;
     left: 50%;
     transform: translateX(-50%);
     background: rgba(0, 0, 0, 0.9);
     color: white;
-    padding: 12px 24px;
-    border-radius: var(--tg-radius);
-    font-size: 14px;
-    z-index: 1000;
-    text-align: center;
+    padding: 12px 20px;
+    border-radius: var(--border-radius);
+    z-index: 1001;
+    display: none;
     max-width: 90%;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    text-align: center;
 }
 
-/* Адаптация для мобильных устройств */
+.status-message.show {
+    display: block;
+    animation: fadeInOut 3s ease-in-out;
+}
+
+@keyframes fadeInOut {
+    0%, 100% { opacity: 0; transform: translateX(-50%) translateY(-10px); }
+    10%, 90% { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+/* Адаптивность */
 @media (max-width: 480px) {
-    .connection-status {
-        top: 10px;
-        font-size: 12px;
-        padding: 10px 16px;
+    .container {
+        padding: 15px;
     }
 
-    #localVideo {
-        width: 100px;
-        height: 75px;
+    .card {
+        padding: 20px;
     }
-}
 
-/* Состояния кнопок при наведении */
-.control-btn:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-}
-
-/* Индикаторы состояния медиа */
-.media-indicator {
-    position: absolute;
-    top: 5px;
-    left: 5px;
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-    z-index: 11;
-}
-
-.media-indicator.mic-on {
-    background: var(--tg-success);
-}
-
-.media-indicator.mic-off {
-    background: var(--tg-danger);
-}
-
-.media-indicator.cam-on {
-    background: var(--tg-success);
-}
-
-.media-indicator.cam-off {
-    background: var(--tg-danger);
-}
-/* Гарантируем правильное отображение страниц */
-#welcomePage {
-    display: flex;
-    flex-direction: column;
-}
-
-#callPage {
-    display: none; /* Изначально скрыта */
-    flex-direction: column;
-}
-
-/* Убедимся, что страницы занимают всю высоту */
-.page {
-    height: 100vh;
-    width: 100%;
-}
-
-/* Анимация перехода */
-.page {
-    transition: opacity 0.3s ease;
-}
-
-.page.active {
-    display: flex !important;
-    animation: fadeIn 0.3s ease;
-}
-
-@keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
-}
-/* Стили для удаленных видео */
-.remote-videos {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 10px;
-    width: 100%;
-    height: 100%;
-    padding: 10px;
-}
-
-.remote-video-container {
-    background: var(--tg-card-bg);
-    border-radius: var(--tg-radius-sm);
-    overflow: hidden;
-    position: relative;
-}
-
-.remote-video-container video {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-}
-
-/* Адаптация для нескольких участников */
-@media (min-width: 768px) {
-    .remote-videos {
-        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    .input-group {
+        flex-direction: column;
     }
-}
 
-/* Индикатор количества участников */
-.participants-count {
-    position: absolute;
-    top: 10px;
-    left: 10px;
-    background: rgba(0,0,0,0.7);
-    color: white;
-    padding: 4px 8px;
-    border-radius: 12px;
-    font-size: 12px;
-    z-index: 11;
-}
-/* Добавьте в конец style.css */
-.remote-videos {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    width: 100%;
-    height: 100%;
-    padding: 10px;
-    overflow-y: auto;
-}
+    .features {
+        flex-wrap: wrap;
+    }
 
-.remote-video-container {
-    background: #1e1e1e;
-    border-radius: 8px;
-    overflow: hidden;
-    min-height: 200px;
-    flex: 1;
-}
-
-#localVideo {
-    transform: scaleX(-1); /* Зеркальное отображение */
-}
-
-/* Гарантируем что видео занимают все пространство */
-video {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-}
-
-/* Индикатор когда камера выключена */
-.local-video-overlay {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: #1e1e1e;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: white;
-    font-size: 14px;
+    .feature {
+        flex: 1;
+        min-width: 80px;
+    }
 }
