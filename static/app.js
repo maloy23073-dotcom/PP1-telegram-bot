@@ -5,28 +5,32 @@ class JitsiVideoCall {
         this.isMobile = this.checkMobile();
         this.initializeElements();
         this.attachEventListeners();
-        this.setupMobileOptimizations();
-        this.log('App initialized - Mobile: ' + this.isMobile);
+        this.setupTelegramApp();
+        this.log('App initialized');
+    }
+
+    setupTelegramApp() {
+        // Расширяем Mini App на весь экран
+        if (window.Telegram && window.Telegram.WebApp) {
+            const webApp = window.Telegram.WebApp;
+
+            // Расширяем на весь экран
+            webApp.expand();
+
+            // Отключаем нативную навигацию Telegram
+            webApp.disableVerticalSwipes();
+            webApp.enableClosingConfirmation();
+
+            // Устанавливаем цвет фона как в Telegram
+            webApp.setBackgroundColor('#182533');
+            webApp.setHeaderColor('#182533');
+
+            this.log('Telegram WebApp configured');
+        }
     }
 
     checkMobile() {
         return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-    }
-
-    setupMobileOptimizations() {
-        // Оптимизации для мобильных устройств
-        if (this.isMobile) {
-            // Добавляем viewport meta tag если его нет
-            if (!document.querySelector('meta[name="viewport"]')) {
-                const meta = document.createElement('meta');
-                meta.name = 'viewport';
-                meta.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no';
-                document.head.appendChild(meta);
-            }
-
-            // Предотвращаем zoom на input focus
-            document.addEventListener('touchstart', function() {}, {passive: true});
-        }
     }
 
     initializeElements() {
@@ -38,11 +42,10 @@ class JitsiVideoCall {
         this.createCallBtn = document.getElementById('createCallBtn');
         this.backBtn = document.getElementById('backBtn');
         this.statusElement = document.getElementById('status');
-        this.mobileControls = document.getElementById('mobileControls');
     }
 
     log(message) {
-        console.log(`📱 ${this.isMobile ? 'MOBILE' : 'DESKTOP'}: ${message}`);
+        console.log(`📞 ${message}`);
     }
 
     attachEventListeners() {
@@ -54,12 +57,6 @@ class JitsiVideoCall {
             if (e.key === 'Enter') this.joinCall();
         });
 
-        // Мобильные события
-        if (this.isMobile) {
-            this.codeInput.addEventListener('focus', () => this.onInputFocus());
-            this.codeInput.addEventListener('blur', () => this.onInputBlur());
-        }
-
         // Автозаполнение кода из URL
         const urlParams = new URLSearchParams(window.location.search);
         const code = urlParams.get('code');
@@ -68,38 +65,27 @@ class JitsiVideoCall {
         }
     }
 
-    onInputFocus() {
-        // Для мобильных - немного поднимаем форму при фокусе
-        if (this.isMobile) {
-            setTimeout(() => {
-                this.codeInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            }, 300);
-        }
-    }
-
-    onInputBlur() {
-        // Возвращаем скролл после ввода
-        if (this.isMobile) {
-            setTimeout(() => {
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-            }, 300);
-        }
-    }
-
     showPage(page) {
         this.welcomePage.style.display = 'none';
         this.jitsiPage.style.display = 'none';
         page.style.display = 'flex';
 
-        // Для мобильных - скрываем клавиатуру при переходе
-        if (this.isMobile && page === this.jitsiPage) {
-            this.codeInput.blur();
-        }
+        // Обновляем размеры для Telegram
+        this.updateTelegramLayout();
+    }
+
+    updateTelegramLayout() {
+        // Принудительно обновляем размеры контейнера
+        setTimeout(() => {
+            if (this.jitsiApi) {
+                this.jitsiApi.executeCommand('resize');
+            }
+        }, 100);
     }
 
     showStatus(message, type = 'info', duration = 3000) {
         this.statusElement.textContent = message;
-        this.statusElement.className = `status-message ${type} ${this.isMobile ? 'mobile' : ''}`;
+        this.statusElement.className = `status-message ${type}`;
         this.statusElement.style.display = 'block';
 
         setTimeout(() => {
@@ -153,25 +139,66 @@ class JitsiVideoCall {
     }
 
     startJitsiMeet(callInfo) {
-        this.log('Starting Jitsi - Organizer: ' + callInfo.is_organizer);
+        this.log('Starting Jitsi Meet');
 
         try {
             this.jitsiContainer.innerHTML = '';
 
-            // Конфигурация для мобильных/десктоп
+            // Конфигурация для автоматического присоединения (без страницы выбора)
             const config = {
                 roomName: callInfo.room_name,
                 width: '100%',
                 height: '100%',
                 parentNode: this.jitsiContainer,
-                configOverwrite: this.getJitsiConfig(callInfo),
-                interfaceConfigOverwrite: this.getInterfaceConfig()
+                configOverwrite: {
+                    prejoinPageEnabled: false, // Убираем страницу выбора
+                    disableDeepLinking: true, // Отключаем глубокие ссылки
+                    enableWelcomePage: false, // Отключаем приветственную страницу
+                    enableClosePage: false, // Отключаем страницу закрытия
+                    startWithAudioMuted: false,
+                    startWithVideoMuted: false,
+                    enableNoAudioDetection: true,
+                    enableNoisyMicDetection: true,
+                    resolution: 720,
+                    constraints: {
+                        video: {
+                            height: { ideal: 720, max: 1080, min: 360 }
+                        },
+                        audio: {
+                            stereo: false,
+                            echoCancellation: true,
+                            noiseSuppression: true,
+                            autoGainControl: true
+                        }
+                    }
+                },
+                interfaceConfigOverwrite: {
+                    // Минималистичный интерфейс как в Telegram
+                    TOOLBAR_BUTTONS: [
+                        'microphone', 'camera', 'hangup', 'tileview', 'settings'
+                    ],
+                    SETTINGS_SECTIONS: ['devices', 'language'],
+                    SHOW_JITSI_WATERMARK: false,
+                    SHOW_WATERMARK_FOR_GUESTS: false,
+                    SHOW_BRAND_WATERMARK: false,
+                    SHOW_POWERED_BY: false,
+                    SHOW_PROMOTIONAL_CLOSE_PAGE: false,
+                    SHOW_CHROME_EXTENSION_BANNER: false,
+                    MOBILE_APP_PROMO: false,
+                    VERTICAL_FILMSTRIP: true,
+                    CLOSE_PAGE_GUEST_HINT: false,
+                    DISABLE_VIDEO_BACKGROUND: false,
+                    DISABLE_FOCUS_INDICATOR: false,
+                    TILE_VIEW_MAX_COLUMNS: 5
+                },
+                userInfo: {
+                    displayName: this.generateDisplayName()
+                }
             };
 
-            // Добавляем JWT токен если это организатор
-            if (callInfo.is_organizer && callInfo.jwt_token) {
+            // Добавляем JWT токен если доступен
+            if (callInfo.jwt_token) {
                 config.jwt = callInfo.jwt_token;
-                this.log('Using JWT token for moderator');
             }
 
             this.jitsiApi = new JitsiMeetExternalAPI('meet.jit.si', config);
@@ -180,72 +207,21 @@ class JitsiVideoCall {
 
         } catch (error) {
             this.log('Jitsi error: ' + error.message);
-            this.showStatus('Ошибка загрузки', 'error');
+            this.showStatus('Ошибка загрузки видеозвонка', 'error');
             this.isInitializing = false;
         }
     }
 
-    getJitsiConfig(callInfo) {
-        const baseConfig = {
-            prejoinPageEnabled: false,
-            startWithAudioMuted: !callInfo.is_organizer, // Организатор с включенным звуком
-            startWithVideoMuted: !callInfo.is_organizer, // Организатор с включенной камерой
-            disableModeratorIndicator: false,
-            enableWelcomePage: false,
-            resolution: this.isMobile ? 360 : 720,
-            constraints: {
-                video: {
-                    height: { ideal: this.isMobile ? 360 : 720 }
-                },
-                audio: {
-                    echoCancellation: true,
-                    noiseSuppression: true,
-                    autoGainControl: true
-                }
-            }
-        };
-
-        // Мобильные специфичные настройки
-        if (this.isMobile) {
-            baseConfig.disableAudioLevels = false;
-            baseConfig.enableTalkWhileMuted = false;
-            baseConfig.faceLandmarks = {
-                enableFaceExpressionsDetection: false,
-                enableFaceLandmarksDetection: false
-            };
-        }
-
-        return baseConfig;
-    }
-
-    getInterfaceConfig() {
-        return {
-            TOOLBAR_BUTTONS: this.isMobile ? [
-                'microphone', 'camera', 'hangup', 'desktop', 'fullscreen'
-            ] : [
-                'microphone', 'camera', 'closedcaptions', 'desktop', 'embedmeeting',
-                'fullscreen', 'fodeviceselection', 'hangup', 'profile', 'chat',
-                'recording', 'livestreaming', 'etherpad', 'sharedvideo', 'settings',
-                'raisehand', 'videoquality', 'filmstrip', 'invite', 'feedback',
-                'stats', 'shortcuts', 'tileview', 'videobackgroundblur', 'download',
-                'help', 'mute-everyone', 'security'
-            ],
-            MOBILE_APP_PROMO: false,
-            SHOW_CHROME_EXTENSION_BANNER: false,
-            VERTICAL_FILMSTRIP: this.isMobile, // Вертикальная пленка на мобильных
-            filmStripOnly: false,
-            SHOW_JITSI_WATERMARK: false,
-            SHOW_WATERMARK_FOR_GUESTS: false,
-            SHOW_BRAND_WATERMARK: false,
-            SHOW_POWERED_BY: false
-        };
+    generateDisplayName() {
+        const names = ['Участник', 'Коллега', 'Собеседник', 'Пользователь'];
+        return names[Math.floor(Math.random() * names.length)];
     }
 
     setupJitsiEvents() {
         this.jitsiApi.addEventListener('videoConferenceJoined', () => {
-            this.log('Conference joined');
+            this.log('Conference joined successfully');
             this.showPage(this.jitsiPage);
-            this.showStatus('Подключено!', 'success', 2000);
+            this.showStatus('Подключено к звонку', 'success', 2000);
             this.isInitializing = false;
         });
 
@@ -257,20 +233,37 @@ class JitsiVideoCall {
             this.log('New participant joined');
         });
 
+        this.jitsiApi.addEventListener('participantLeft', () => {
+            this.log('Participant left');
+        });
+
+        this.jitsiApi.addEventListener('audioMuteStatusChanged', (event) => {
+            this.log('Audio mute: ' + event.muted);
+        });
+
+        this.jitsiApi.addEventListener('videoMuteStatusChanged', (event) => {
+            this.log('Video mute: ' + event.muted);
+        });
+
         // Обработка ошибок
         this.jitsiApi.addEventListener('connectionFailed', () => {
-            this.showStatus('Ошибка подключения', 'error');
+            this.showStatus('Ошибка подключения к серверу', 'error');
             this.isInitializing = false;
         });
 
-        // Таймаут
+        this.jitsiApi.addEventListener('proxyConnectionError', () => {
+            this.showStatus('Проблемы с сетью', 'error');
+            this.isInitializing = false;
+        });
+
+        // Таймаут на случай проблем
         setTimeout(() => {
             if (this.isInitializing) {
-                this.log('Jitsi timeout');
+                this.log('Jitsi timeout - showing page anyway');
                 this.showPage(this.jitsiPage);
                 this.isInitializing = false;
             }
-        }, 15000);
+        }, 10000);
     }
 
     leaveCall() {
@@ -280,7 +273,7 @@ class JitsiVideoCall {
             try {
                 this.jitsiApi.dispose();
             } catch (error) {
-                this.log('Dispose error: ' + error.message);
+                this.log('Error disposing Jitsi: ' + error.message);
             }
             this.jitsiApi = null;
         }
@@ -289,40 +282,42 @@ class JitsiVideoCall {
         this.showPage(this.welcomePage);
         this.isInitializing = false;
 
-        // Показываем статус только если не было ошибки
-        if (!this.isInitializing) {
-            this.showStatus('Звонок завершен', 'info', 2000);
+        // Закрываем Mini App если это Telegram
+        if (window.Telegram && window.Telegram.WebApp) {
+            setTimeout(() => {
+                window.Telegram.WebApp.close();
+            }, 1000);
         }
     }
 
     createCall() {
-        this.showStatus('Используйте /create в боте Telegram', 'info');
+        this.showStatus('Используйте команду /create в боте Telegram', 'info');
     }
 }
 
-// Инициализация с мобильной оптимизацией
+// Инициализация приложения
 document.addEventListener('DOMContentLoaded', () => {
     try {
         if (typeof JitsiMeetExternalAPI === 'undefined') {
-            throw new Error('Jitsi API не загружен');
+            throw new Error('Jitsi Meet API не загружен');
         }
 
-        // Mobile-specific optimizations
-        if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
-            // Prevent bounce effect on iOS
-            document.body.style.overflow = 'hidden';
-            document.body.style.height = '100vh';
-        }
+        // Устанавливаем стиль как в Telegram
+        document.body.style.background = '#182533';
 
         window.videoCallApp = new JitsiVideoCall();
+
+        // Показываем welcome page
+        document.getElementById('welcomePage').style.display = 'flex';
 
     } catch (error) {
         console.error('Initialization error:', error);
         document.body.innerHTML = `
-            <div style="padding: 20px; text-align: center; color: white; background: #0f0f0f; height: 100vh; display: flex; flex-direction: column; justify-content: center;">
-                <h2>😔 Ошибка загрузки</h2>
-                <p>${error.message}</p>
-                <button onclick="location.reload()" style="margin-top: 20px; padding: 10px 20px; background: #2b87db; color: white; border: none; border-radius: 8px; cursor: pointer;">
+            <div style="padding: 40px 20px; text-align: center; color: white; background: #182533; height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+                <div style="font-size: 48px; margin-bottom: 20px;">📞</div>
+                <h2 style="margin-bottom: 10px; color: #fff;">Ошибка загрузки</h2>
+                <p style="color: #8ba0b2; margin-bottom: 30px;">${error.message}</p>
+                <button onclick="location.reload()" style="padding: 12px 24px; background: #2ea6ff; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px;">
                     Попробовать снова
                 </button>
             </div>
