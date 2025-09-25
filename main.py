@@ -135,14 +135,50 @@ async def read_root():
 
 @app.get("/call/{code}/info")
 async def call_info(code: str):
+    """Информация о звонке - с подробным логированием"""
+    print(f"📞 Call info requested for code: {code}")
+    print(f"📊 Calls storage: {calls_storage}")
+
     if code in calls_storage:
         call = calls_storage[code]
-        return {
+        jitsi_url = f"https://{JITSI_DOMAIN}/{call['room_name']}"
+
+        response = {
             "exists": True,
             "room_name": call['room_name'],
+            "jitsi_url": jitsi_url,
             "active": call['active']
         }
-    return {"exists": False, "active": False}
+        print(f"✅ Call found: {response}")
+        return response
+
+    response = {"exists": False, "active": False}
+    print(f"❌ Call not found: {response}")
+    return response
+
+
+@app.post("/call/{code}/join")
+async def join_call(code: str):
+    """Регистрация участника - с подробным логированием"""
+    print(f"🎯 Join call requested for code: {code}")
+
+    if code in calls_storage:
+        calls_storage[code]['active'] = True
+        response = {
+            "success": True,
+            "message": "Joined successfully",
+            "room_name": calls_storage[code]['room_name']
+        }
+        print(f"✅ Join successful: {response}")
+        return response
+
+    response = {
+        "success": False,
+        "message": "Call not found",
+        "code": code
+    }
+    print(f"❌ Join failed: {response}")
+    return response
 
 
 @app.post("/call/{code}/join")

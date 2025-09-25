@@ -4,6 +4,7 @@ class JitsiVideoCall {
         this.initializeElements();
         this.attachEventListeners();
         this.expandMiniApp();
+        this.log('App initialized');
     }
 
     initializeElements() {
@@ -17,11 +18,21 @@ class JitsiVideoCall {
         this.statusElement = document.getElementById('status');
     }
 
+    log(message, data = null) {
+        console.log(`📝 ${message}`, data || '');
+        // Также показываем в статусе для отладки
+        if (typeof data !== 'undefined') {
+            this.showStatus(`${message} - ${JSON.stringify(data)}`, 'info');
+        }
+    }
+
     expandMiniApp() {
-        // Расширяем Mini App на весь экран
+        this.log('Expanding Mini App');
         if (window.Telegram && window.Telegram.WebApp) {
             window.Telegram.WebApp.expand();
-            window.Telegram.WebApp.enableClosingConfirmation();
+            this.log('Mini App expanded');
+        } else {
+            this.log('Telegram WebApp API not available');
         }
     }
 
@@ -34,11 +45,11 @@ class JitsiVideoCall {
             if (e.key === 'Enter') this.joinCall();
         });
 
-        // Автозаполнение кода из URL
         const urlParams = new URLSearchParams(window.location.search);
         const code = urlParams.get('code');
         if (code) {
             this.codeInput.value = code;
+            this.log('Code from URL:', code);
         }
     }
 
@@ -46,220 +57,256 @@ class JitsiVideoCall {
         this.welcomePage.classList.remove('active');
         this.jitsiPage.classList.remove('active');
         page.classList.add('active');
+        this.log(`Showing page: ${page.id}`);
     }
 
     showStatus(message, type = 'info') {
         this.statusElement.textContent = message;
         this.statusElement.className = `status-message ${type}`;
         this.statusElement.style.display = 'block';
+        this.log(`Status: ${message}`);
 
-        setTimeout(() => {
-            this.statusElement.style.display = 'none';
-        }, 3000);
+        if (type !== 'error') {
+            setTimeout(() => {
+                this.statusElement.style.display = 'none';
+            }, 5000);
+        }
     }
 
     async joinCall() {
         const code = this.codeInput.value.trim();
+        this.log('Join call started', { code });
 
         if (!code) {
             this.showStatus('Введите код звонка', 'error');
             return;
         }
 
-        this.showStatus('Подключение к видеозвонку...', 'info');
+        this.showStatus('Проверка кода...', 'info');
 
         try {
-            // Проверяем существование звонка
+            // Шаг 1: Проверяем код на сервере
+            this.log('Step 1: Checking call info');
             const callInfo = await this.getCallInfo(code);
+            this.log('Call info response:', callInfo);
 
             if (!callInfo.exists) {
                 this.showStatus('Звонок не найден', 'error');
                 return;
             }
 
-            // Регистрируем участие
-            await this.registerJoin(code);
+            // Шаг 2: Регистрируем участие
+            this.log('Step 2: Registering join');
+            const joinResult = await this.registerJoin(code);
+            this.log('Join result:', joinResult);
 
-            // Запускаем Jitsi
+            // Шаг 3: Запускаем Jitsi
+            this.log('Step 3: Starting Jitsi Meet');
+            this.showStatus('Загрузка видеозвонка...', 'info');
             this.startJitsiMeet(callInfo.room_name);
 
         } catch (error) {
-            console.error('Error joining call:', error);
-            this.showStatus('Ошибка подключения', 'error');
+            this.log('Error in joinCall:', error);
+            this.showStatus(`Ошибка: ${error.message}`, 'error');
         }
     }
 
-    async createCall() {
-        this.showStatus('Используйте команду /create в боте Telegram', 'info');
+    async getCallInfo(code) {
+        this.log(`Fetching call info for code: ${code}`);
+        try {
+            const response = await fetch(`/call/${code}/info`);
+            this.log('Response status:', response.status);
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const data = await response.json();
+            this.log('Call info data:', data);
+            return data;
+        } catch (error) {
+            this.log('Error fetching call info:', error);
+            throw error;
+        }
+    }
+
+    async registerJoin(code) {
+        this.log(`Registering join for code: ${code}`);
+        try {
+            const response = await fetch(`/call/${code}/join`, {
+                method: 'POST'
+            });
+            this.log('Join response status:', response.status);
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const data = await response.json();
+            this.log('Join response data:', data);
+            return data;
+        } catch (error) {
+            this.log('Error registering join:', error);
+            throw error;
+        }
     }
 
     startJitsiMeet(roomName) {
+        this.log('Starting Jitsi Meet', { roomName });
+
         try {
-            // Очищаем контейнер перед инициализацией
+            // Очищаем контейнер
             this.jitsiContainer.innerHTML = '';
+
+            // Проверяем доступность Jitsi API
+            if (typeof JitsiMeetExternalAPI === 'undefined') {
+                throw new Error('Jitsi Meet API не загружен');
+            }
+
+            this.log('Jitsi API is available');
 
             const domain = 'meet.jit.si';
 
-            // Конфигурация для Mobile/Telegram
+            // Минимальная конфигурация для тестирования
             const options = {
                 roomName: roomName,
                 width: '100%',
                 height: '100%',
                 parentNode: this.jitsiContainer,
                 configOverwrite: {
-                    prejoinPageEnabled: false, // Пропускаем страницу предварительного присоединения
+                    prejoinPageEnabled: false,
                     startWithAudioMuted: false,
                     startWithVideoMuted: false,
-                    disableModeratorIndicator: false,
-                    startScreenSharing: false,
-                    enableEmailInStats: false,
-                    disableInviteFunctions: true,
-                    disableRecordAudioNotification: true,
-                    enableNoAudioDetection: true,
-                    enableNoisyMicDetection: true,
-                    resolution: 360, // Оптимальное для мобильных
-                    constraints: {
-                        video: {
-                            height: { ideal: 360, max: 720, min: 180 }
-                        },
-                        audio: {
-                            stereo: false,
-                            echoCancellation: true,
-                            noiseSuppression: true,
-                            autoGainControl: true
-                        }
-                    },
-                    prejoinConfig: {
-                        enabled: false
-                    }
+                    disableThirdPartyRequests: true,
+                    enableWelcomePage: false,
+                    enableClosePage: false
                 },
                 interfaceConfigOverwrite: {
-                    // Упрощенный интерфейс для мобильных
                     TOOLBAR_BUTTONS: [
-                        'microphone', 'camera', 'hangup', 'settings', 'videoquality'
+                        'microphone', 'camera', 'hangup', 'settings'
                     ],
-                    SETTINGS_SECTIONS: ['devices', 'language'],
                     SHOW_JITSI_WATERMARK: false,
                     SHOW_WATERMARK_FOR_GUESTS: false,
-                    SHOW_BRAND_WATERMARK: false,
-                    SHOW_POWERED_BY: false,
-                    SHOW_PROMOTIONAL_CLOSE_PAGE: false,
-                    MOBILE_APP_PROMO: false,
-                    VERTICAL_FILMSTRIP: true, // Вертикальная пленка для мобильных
-                    CLOSE_PAGE_GUEST_HINT: false,
-                    DISABLE_VIDEO_BACKGROUND: false,
-                    DISABLE_FOCUS_INDICATOR: false,
-                    TILE_VIEW_MAX_COLUMNS: 3
-                },
-                userInfo: {
-                    displayName: this.generateDisplayName()
+                    SHOW_POWERED_BY: false
                 }
             };
 
-            console.log('Initializing Jitsi Meet with options:', options);
+            this.log('Jitsi options:', options);
 
+            // Создаем экземпляр Jitsi
             this.jitsiApi = new JitsiMeetExternalAPI(domain, options);
+            this.log('Jitsi instance created');
 
-            // Обработчики событий Jitsi
-            this.jitsiApi.addEventListener('videoConferenceJoined', (payload) => {
-                console.log('✅ Joined Jitsi conference:', payload);
+            // Добавляем обработчики событий
+            this.jitsiApi.addEventListener('videoConferenceJoined', () => {
+                this.log('✅ VIDEO CONFERENCE JOINED');
                 this.showPage(this.jitsiPage);
-                this.showStatus('Подключено к видеозвонку', 'success');
-
-                // Скрываем статус через 2 секунды
-                setTimeout(() => {
-                    this.statusElement.style.display = 'none';
-                }, 2000);
+                this.showStatus('Подключено!', 'success');
             });
 
             this.jitsiApi.addEventListener('videoConferenceLeft', () => {
-                console.log('Left Jitsi conference');
+                this.log('VIDEO CONFERENCE LEFT');
                 this.leaveCall();
             });
 
             this.jitsiApi.addEventListener('participantJoined', (payload) => {
-                console.log('Participant joined:', payload);
-                this.showStatus('Новый участник присоединился', 'info');
+                this.log('PARTICIPANT JOINED', payload);
+                this.showStatus('Участник присоединился', 'info');
             });
 
             this.jitsiApi.addEventListener('participantLeft', (payload) => {
-                console.log('Participant left:', payload);
+                this.log('PARTICIPANT LEFT', payload);
                 this.showStatus('Участник вышел', 'info');
             });
 
-            this.jitsiApi.addEventListener('audioMuteStatusChanged', (payload) => {
-                console.log('Audio mute status changed:', payload);
-            });
-
-            this.jitsiApi.addEventListener('videoMuteStatusChanged', (payload) => {
-                console.log('Video mute status changed:', payload);
-            });
-
             this.jitsiApi.addEventListener('readyToClose', () => {
-                console.log('Jitsi ready to close');
+                this.log('READY TO CLOSE');
                 this.leaveCall();
             });
 
+            this.jitsiApi.addEventListener('connectionFailed', () => {
+                this.log('CONNECTION FAILED');
+                this.showStatus('Ошибка подключения', 'error');
+            });
+
+            this.jitsiApi.addEventListener('loadConfigError', (error) => {
+                this.log('LOAD CONFIG ERROR', error);
+                this.showStatus('Ошибка конфигурации', 'error');
+            });
+
+            this.jitsiApi.addEventListener('proxyConnectionError', (error) => {
+                this.log('PROXY CONNECTION ERROR', error);
+                this.showStatus('Ошибка сети', 'error');
+            });
+
+            // Таймаут для проверки загрузки
+            setTimeout(() => {
+                if (this.jitsiPage.classList.contains('active')) {
+                    this.log('Jitsi loaded successfully');
+                } else {
+                    this.log('Jitsi loading timeout - showing page anyway');
+                    this.showPage(this.jitsiPage);
+                    this.showStatus('Проверьте подключение', 'info');
+                }
+            }, 10000);
+
         } catch (error) {
-            console.error('❌ Error initializing Jitsi Meet:', error);
-            this.showStatus('Ошибка загрузки видеозвонка', 'error');
+            this.log('❌ Error starting Jitsi Meet:', error);
+            this.showStatus(`Ошибка Jitsi: ${error.message}`, 'error');
+
+            // Показываем страницу Jitsi даже при ошибке
+            this.showPage(this.jitsiPage);
         }
     }
 
-    generateDisplayName() {
-        // Генерируем случайное имя для участника
-        const adjectives = ['Веселый', 'Серьезный', 'Умный', 'Дружелюбный', 'Спокойный'];
-        const nouns = ['Котик', 'Пёсик', 'Тигр', 'Медведь', 'Орёл'];
-        const adj = adjectives[Math.floor(Math.random() * adjectives.length)];
-        const noun = nouns[Math.floor(Math.random() * nouns.length)];
-        return `${adj} ${noun}`;
-    }
-
     leaveCall() {
+        this.log('Leaving call');
+
         if (this.jitsiApi) {
             try {
                 this.jitsiApi.dispose();
                 this.jitsiApi = null;
+                this.log('Jitsi disposed');
             } catch (error) {
-                console.error('Error disposing Jitsi:', error);
+                this.log('Error disposing Jitsi:', error);
             }
         }
 
-        // Очищаем контейнер
         this.jitsiContainer.innerHTML = '';
-
-        // Возвращаемся на главную
         this.showPage(this.welcomePage);
         this.showStatus('Звонок завершен', 'info');
     }
 
-    async getCallInfo(code) {
-        const response = await fetch(`/call/${code}/info`);
-        return await response.json();
-    }
-
-    async registerJoin(code) {
-        const response = await fetch(`/call/${code}/join`, {
-            method: 'POST'
-        });
-        return await response.json();
+    async createCall() {
+        this.showStatus('Используйте /create в боте Telegram', 'info');
     }
 }
 
-// Инициализация при загрузке
+// Инициализация с обработкой ошибок
 document.addEventListener('DOMContentLoaded', () => {
-    // Ждем загрузки Jitsi API
-    if (typeof JitsiMeetExternalAPI === 'undefined') {
-        console.error('Jitsi Meet API not loaded');
-        document.getElementById('status').textContent = 'Ошибка загрузки Jitsi Meet';
-        return;
-    }
+    try {
+        // Проверяем загрузку Jitsi API
+        if (typeof JitsiMeetExternalAPI === 'undefined') {
+            console.error('❌ Jitsi Meet API not loaded');
+            document.getElementById('status').textContent = 'Ошибка: Jitsi API не загружен';
+            document.getElementById('status').style.display = 'block';
+            return;
+        }
 
-    window.videoCallApp = new JitsiVideoCall();
-    console.log('✅ Jitsi VideoCall App initialized');
+        console.log('✅ Jitsi Meet API loaded successfully');
+        window.videoCallApp = new JitsiVideoCall();
+
+    } catch (error) {
+        console.error('❌ App initialization error:', error);
+        document.getElementById('status').textContent = `Ошибка инициализации: ${error.message}`;
+        document.getElementById('status').style.display = 'block';
+    }
 });
 
-// Обработка ошибок загрузки Jitsi
+// Глобальный обработчик ошибок
 window.addEventListener('error', (event) => {
-    console.error('Global error:', event.error);
+    console.error('🌍 Global error:', event.error);
+    if (window.videoCallApp) {
+        window.videoCallApp.showStatus(`Ошибка: ${event.error.message}`, 'error');
+    }
 });
