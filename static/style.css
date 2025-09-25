@@ -1,223 +1,26 @@
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-    -webkit-tap-highlight-color: transparent;
-}
+/* Добавьте это в конец вашего CSS файла */
 
-html, body {
-    height: 100%;
-    overflow: hidden;
-    background: #182533;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-}
-
-body {
-    background: #182533;
-    color: #ffffff;
-    height: 100vh;
-    overflow: hidden;
-}
-
-/* Telegram-like styles */
+/* Гарантируем правильное отображение страниц */
 .page {
     display: none;
     height: 100vh;
     flex-direction: column;
-    background: #182533;
 }
 
 #welcomePage {
     display: flex;
 }
 
-.container {
-    width: 100%;
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-}
-
-/* Header */
-.header {
-    background: #182533;
-    padding: 60px 20px 30px;
-    text-align: center;
-    border-bottom: 1px solid #2d4256;
-}
-
-.logo {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 12px;
-    margin-bottom: 8px;
-}
-
-.logo-icon {
-    font-size: 42px;
-}
-
-.logo h1 {
-    font-size: 24px;
-    font-weight: 600;
-    color: #ffffff;
-}
-
-.subtitle {
-    color: #8ba0b2;
-    font-size: 15px;
-    line-height: 1.4;
-}
-
-/* Card */
-.card {
-    background: transparent;
-    padding: 30px 20px;
-    margin: 0;
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-}
-
-.card h2 {
-    text-align: center;
-    margin-bottom: 16px;
-    font-size: 17px;
-    font-weight: 500;
-    color: #ffffff;
-}
-
-.instruction {
-    text-align: center;
-    color: #8ba0b2;
-    margin-bottom: 30px;
-    font-size: 15px;
-}
-
-.input-group {
-    display: flex;
-    gap: 12px;
-    margin-bottom: 24px;
-}
-
-.code-input {
-    flex: 1;
-    padding: 16px;
-    border: 1px solid #2d4256;
-    border-radius: 12px;
-    background: rgba(255, 255, 255, 0.08);
-    color: #ffffff;
-    font-size: 17px;
-    text-align: center;
-    transition: all 0.2s ease;
-}
-
-.code-input:focus {
-    outline: none;
-    border-color: #2ea6ff;
-    background: rgba(255, 255, 255, 0.12);
-}
-
-.code-input::placeholder {
-    color: #6d7f8f;
-}
-
-.primary-btn {
-    background: #2ea6ff;
-    color: #ffffff;
-    border: none;
-    padding: 16px 24px;
-    border-radius: 12px;
-    font-size: 17px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    min-height: 54px;
-}
-
-.primary-btn:hover {
-    background: #1e8dd8;
-}
-
-.primary-btn:active {
-    transform: scale(0.98);
-}
-
-.primary-btn:disabled {
-    background: #1c3b5a;
-    cursor: not-allowed;
-    opacity: 0.7;
-}
-
-.secondary-btn {
-    background: transparent;
-    color: #2ea6ff;
-    border: 1px solid #2ea6ff;
-    padding: 14px 20px;
-    border-radius: 12px;
-    font-size: 16px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s ease;
-}
-
-.secondary-btn:hover {
-    background: rgba(46, 166, 255, 0.1);
-}
-
-.divider {
-    display: flex;
-    align-items: center;
-    margin: 24px 0;
-    color: #5d7a8f;
-    font-size: 14px;
-}
-
-.divider::before,
-.divider::after {
-    content: '';
-    flex: 1;
-    height: 1px;
-    background: #2d4256;
-}
-
-.divider::before {
-    margin-right: 12px;
-}
-
-.divider::after {
-    margin-left: 12px;
-}
-
-/* Jitsi страница */
 #jitsiPage {
-    position: relative;
-    background: #000000;
+    background: #000;
 }
 
-#jitsiContainer {
-    width: 100%;
-    height: 100%;
+/* Явно указываем отображение для активной страницы */
+.page.active {
+    display: flex !important;
 }
 
-.danger-btn {
-    background: rgba(231, 76, 60, 0.9);
-    color: white;
-    border: none;
-    padding: 10px 16px;
-    border-radius: 8px;
-    font-size: 14px;
-    cursor: pointer;
-    position: absolute;
-    top: 15px;
-    left: 15px;
-    z-index: 1000;
-    backdrop-filter: blur(10px);
-}
-
-/* Status Messages */
+/* Улучшаем видимость статуса */
 .status-message {
     position: fixed;
     top: 20px;
@@ -226,8 +29,8 @@ body {
     background: rgba(0, 0, 0, 0.9);
     color: white;
     padding: 12px 20px;
-    border-radius: 10px;
-    z-index: 1001;
+    border-radius: 8px;
+    z-index: 10000;
     display: none;
     max-width: 90%;
     text-align: center;
@@ -246,37 +49,24 @@ body {
     background: rgba(52, 152, 219, 0.9);
 }
 
-/* Адаптация для мобильных */
-@media (max-width: 768px) {
-    .header {
-        padding: 40px 20px 20px;
-    }
-
-    .card {
-        padding: 20px;
-    }
-
-    .input-group {
-        flex-direction: column;
-    }
-
-    .primary-btn, .secondary-btn {
-        width: 100%;
-    }
+/* Контейнер для Jitsi должен быть видим */
+#jitsiContainer {
+    width: 100%;
+    height: 100%;
+    background: #000;
 }
 
-/* Специальные стили для Telegram Mini App */
-@media (max-width: 480px) {
-    .header {
-        padding-top: max(40px, env(safe-area-inset-top));
-    }
-
-    .card {
-        padding-bottom: max(20px, env(safe-area-inset-bottom));
-    }
-}
-
-/* Убираем скроллбар */
-::-webkit-scrollbar {
-    display: none;
+/* Кнопка возврата */
+.danger-btn {
+    position: absolute;
+    top: 15px;
+    left: 15px;
+    z-index: 1000;
+    background: rgba(231, 76, 60, 0.9);
+    color: white;
+    border: none;
+    padding: 10px 15px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
 }
