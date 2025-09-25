@@ -1,16 +1,3 @@
-:root {
-    --primary-color: #2b87db;
-    --primary-dark: #1a6dc1;
-    --danger-color: #e74c3c;
-    --success-color: #27ae60;
-    --bg-color: #0f0f0f;
-    --card-bg: #1a1a1a;
-    --text-color: #ffffff;
-    --text-secondary: #b0b0b0;
-    --border-radius: 12px;
-    --shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-}
-
 * {
     margin: 0;
     padding: 0;
@@ -18,10 +5,9 @@
 }
 
 body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    background: var(--bg-color);
-    color: var(--text-color);
-    line-height: 1.5;
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    background: #0f0f0f;
+    color: white;
     height: 100vh;
     overflow: hidden;
 }
@@ -32,7 +18,7 @@ body {
     flex-direction: column;
 }
 
-.page.active {
+#welcomePage {
     display: flex;
 }
 
@@ -65,35 +51,32 @@ body {
 
 .logo h1 {
     font-size: 1.5rem;
-    background: linear-gradient(135deg, var(--primary-color), #9b59b6);
+    background: linear-gradient(135deg, #2b87db, #9b59b6);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
 }
 
 .subtitle {
-    color: var(--text-secondary);
+    color: #b0b0b0;
     font-size: 0.9rem;
 }
 
 .card {
-    background: var(--card-bg);
+    background: #1a1a1a;
     padding: 25px;
-    border-radius: var(--border-radius);
-    box-shadow: var(--shadow);
+    border-radius: 12px;
     margin-bottom: 20px;
 }
 
 .card h2 {
     text-align: center;
     margin-bottom: 10px;
-    font-size: 1.3rem;
 }
 
 .instruction {
     text-align: center;
-    color: var(--text-secondary);
+    color: #b0b0b0;
     margin-bottom: 20px;
-    font-size: 0.9rem;
 }
 
 .input-group {
@@ -106,105 +89,56 @@ body {
     flex: 1;
     padding: 12px 15px;
     border: 2px solid #333;
-    border-radius: var(--border-radius);
+    border-radius: 8px;
     background: #2a2a2a;
-    color: var(--text-color);
+    color: white;
     font-size: 1rem;
-    transition: border-color 0.3s;
 }
 
 .code-input:focus {
     outline: none;
-    border-color: var(--primary-color);
+    border-color: #2b87db;
 }
 
 .primary-btn {
-    background: var(--primary-color);
+    background: #2b87db;
     color: white;
     border: none;
     padding: 12px 20px;
-    border-radius: var(--border-radius);
+    border-radius: 8px;
     font-size: 1rem;
-    font-weight: 600;
     cursor: pointer;
-    transition: background 0.3s;
-    white-space: nowrap;
-}
-
-.primary-btn:hover {
-    background: var(--primary-dark);
 }
 
 .secondary-btn {
     background: transparent;
-    color: var(--text-secondary);
-    border: 2px solid var(--text-secondary);
+    color: #b0b0b0;
+    border: 2px solid #b0b0b0;
     padding: 12px 20px;
-    border-radius: var(--border-radius);
+    border-radius: 8px;
     font-size: 1rem;
-    font-weight: 600;
     cursor: pointer;
-    transition: all 0.3s;
     width: 100%;
-}
-
-.secondary-btn:hover {
-    border-color: var(--text-color);
-    color: var(--text-color);
 }
 
 .danger-btn {
-    background: var(--danger-color);
+    background: #e74c3c;
     color: white;
     border: none;
-    padding: 12px 20px;
-    border-radius: var(--border-radius);
-    font-size: 1rem;
-    font-weight: 600;
+    padding: 10px 15px;
+    border-radius: 8px;
     cursor: pointer;
-    transition: background 0.3s;
-    width: 100%;
     margin: 10px;
 }
 
-.danger-btn:hover {
-    background: #c0392b;
-}
-
-.divider {
-    display: flex;
-    align-items: center;
-    margin: 20px 0;
-    color: var(--text-secondary);
-    font-size: 0.9rem;
-}
-
-.divider::before,
-.divider::after {
-    content: '';
-    flex: 1;
-    height: 1px;
-    background: #333;
-}
-
-.divider::before {
-    margin-right: 10px;
-}
-
-.divider::after {
-    margin-left: 10px;
-}
-
-/* Jitsi страница */
 #jitsiPage {
     position: relative;
-    background: #000;
+    background: black;
 }
 
 #jitsiContainer {
     width: 100%;
     height: 100%;
-    background: #000;
 }
 
 .jitsi-controls {
@@ -214,58 +148,17 @@ body {
     z-index: 1000;
 }
 
-/* Статус сообщения */
 .status-message {
     position: fixed;
     top: 20px;
     left: 50%;
     transform: translateX(-50%);
-    background: rgba(0, 0, 0, 0.9);
+    background: rgba(0,0,0,0.9);
     color: white;
     padding: 12px 20px;
-    border-radius: var(--border-radius);
+    border-radius: 8px;
     z-index: 1001;
     display: none;
     max-width: 90%;
     text-align: center;
-    font-size: 0.9rem;
-}
-
-.status-message.error {
-    background: #e74c3c;
-}
-
-.status-message.success {
-    background: #27ae60;
-}
-
-.status-message.info {
-    background: #3498db;
-}
-
-/* Адаптивность */
-@media (max-width: 480px) {
-    .container {
-        padding: 15px;
-    }
-
-    .card {
-        padding: 20px;
-    }
-
-    .input-group {
-        flex-direction: column;
-    }
-
-    .danger-btn {
-        padding: 10px 15px;
-        font-size: 0.9rem;
-    }
-}
-
-/* Важно: стили для Jitsi iframe */
-#jitsiContainer iframe {
-    border: none;
-    width: 100% !important;
-    height: 100% !important;
 }

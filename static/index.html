@@ -1,55 +1,36 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html>
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VideoCall Bot — Jitsi Meet</title>
+    <title>VideoCall Bot</title>
     <link rel="stylesheet" href="/static/style.css">
     <script src="https://meet.jit.si/external_api.js"></script>
 </head>
 <body>
-    <!-- Главная страница -->
-    <div id="welcomePage" class="page active">
+    <div id="welcomePage" class="page">
         <div class="container">
             <div class="header">
                 <div class="logo">
                     <div class="logo-icon">🎥</div>
                     <h1>Jitsi VideoCall</h1>
                 </div>
-                <p class="subtitle">Качественные видеозвонки через Jitsi Meet</p>
+                <p class="subtitle">Видеозвонки через Jitsi Meet</p>
             </div>
 
             <div class="card">
                 <h2>Присоединиться к звонку</h2>
-                <p class="instruction">Введите код, полученный от организатора</p>
-
-                <div class="input-group">
-                    <input type="text" id="codeInput" maxlength="10" placeholder="Введите код" class="code-input">
-                    <button id="joinBtn" class="primary-btn">
-                        <span>Подключиться</span>
-                    </button>
-                </div>
-
-                <div class="divider">или</div>
-
-                <button id="createCallBtn" class="secondary-btn">
-                    Создать новый звонок
-                </button>
+                <input type="text" id="codeInput" placeholder="Введите код">
+                <button id="joinBtn" class="primary-btn">Подключиться</button>
+                <button id="createCallBtn" class="secondary-btn">Создать звонок</button>
             </div>
         </div>
     </div>
 
-    <!-- Страница Jitsi -->
     <div id="jitsiPage" class="page">
         <div id="jitsiContainer"></div>
-        <div class="jitsi-controls">
-            <button id="backBtn" class="danger-btn">
-                ← Назад
-            </button>
-        </div>
+        <button id="backBtn" class="danger-btn">← Назад</button>
     </div>
 
-    <!-- Статус -->
     <div id="status" class="status-message"></div>
 
     <script src="/static/app.js"></script>
