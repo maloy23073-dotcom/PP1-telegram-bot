@@ -1,106 +1,211 @@
-// Простая инициализация Telegram WebApp
+// Инициализация Telegram WebApp в стиле Telegram
 function initTelegramWebApp() {
     if (window.Telegram && window.Telegram.WebApp) {
         const webApp = Telegram.WebApp;
 
-        // Расширяем на весь экран
+        // Настраиваем в стиле Telegram
         webApp.expand();
         webApp.enableClosingConfirmation();
-
-        // Устанавливаем цвета
         webApp.setHeaderColor('#182533');
         webApp.setBackgroundColor('#182533');
+        webApp.setBackgroundColor('#182533');
+
+        // Отключаем ненужные функции
+        webApp.disableVerticalSwipes();
+        webApp.disableHorizontalSwipes();
 
         console.log('✅ Telegram WebApp initialized');
         return webApp;
     }
-    console.log('⚠️ Telegram WebApp not detected - running in browser mode');
     return null;
 }
 
-// Основной класс приложения
-class VideoCallApp {
+// Основной класс приложения в стиле Telegram
+class TelegramCallApp {
     constructor() {
         this.webApp = initTelegramWebApp();
-        this.jitsiApi = null;
-        this.isInitializing = false;
+        this.isProcessing = false;
         this.init();
     }
 
     init() {
-        console.log('🚀 Initializing VideoCall App');
+        console.log('🚀 Initializing Telegram Call App');
+        this.applyTelegramStyles();
         this.bindEvents();
         this.checkUrlCode();
-        console.log('✅ VideoCall App initialized');
+        this.setupAppearance();
+        console.log('✅ Telegram Call App initialized');
+    }
+
+    // Применяем стили Telegram
+    applyTelegramStyles() {
+        document.documentElement.style.setProperty('--tg-theme-bg-color', '#182533');
+        document.documentElement.style.setProperty('--tg-theme-text-color', '#ffffff');
+        document.documentElement.style.setProperty('--tg-theme-hint-color', '#8ba0b2');
+        document.documentElement.style.setProperty('--tg-theme-link-color', '#2ea6ff');
+        document.documentElement.style.setProperty('--tg-theme-button-color', '#2ea6ff');
+        document.documentElement.style.setProperty('--tg-theme-button-text-color', '#ffffff');
+
+        document.body.style.background = '#182533';
+        document.body.style.color = '#ffffff';
+    }
+
+    // Настраиваем внешний вид как в Telegram
+    setupAppearance() {
+        const style = document.createElement('style');
+        style.textContent = `
+            .telegram-header {
+                background: #182533;
+                padding: 16px;
+                text-align: center;
+                border-bottom: 1px solid #2d4256;
+            }
+            
+            .telegram-title {
+                font-size: 18px;
+                font-weight: 600;
+                margin-bottom: 4px;
+                color: #ffffff;
+            }
+            
+            .telegram-subtitle {
+                font-size: 14px;
+                color: #8ba0b2;
+            }
+            
+            .telegram-card {
+                background: transparent;
+                padding: 16px;
+                margin: 0;
+            }
+            
+            .telegram-input {
+                width: 100%;
+                padding: 12px 16px;
+                background: rgba(255, 255, 255, 0.08);
+                border: 1px solid #2d4256;
+                border-radius: 10px;
+                color: #ffffff;
+                font-size: 16px;
+                text-align: center;
+                margin-bottom: 16px;
+            }
+            
+            .telegram-input:focus {
+                outline: none;
+                border-color: #2ea6ff;
+                background: rgba(255, 255, 255, 0.12);
+            }
+            
+            .telegram-button {
+                width: 100%;
+                padding: 14px 16px;
+                background: #2ea6ff;
+                color: #ffffff;
+                border: none;
+                border-radius: 10px;
+                font-size: 16px;
+                font-weight: 500;
+                cursor: pointer;
+                margin-bottom: 8px;
+                transition: background 0.2s;
+            }
+            
+            .telegram-button:hover {
+                background: #1e8dd8;
+            }
+            
+            .telegram-button:active {
+                transform: scale(0.98);
+            }
+            
+            .telegram-button-secondary {
+                background: transparent;
+                border: 1px solid #2ea6ff;
+                color: #2ea6ff;
+            }
+            
+            .telegram-divider {
+                display: flex;
+                align-items: center;
+                margin: 20px 0;
+                color: #5d7a8f;
+                font-size: 14px;
+            }
+            
+            .telegram-divider::before,
+            .telegram-divider::after {
+                content: '';
+                flex: 1;
+                height: 1px;
+                background: #2d4256;
+            }
+            
+            .telegram-divider::before {
+                margin-right: 12px;
+            }
+            
+            .telegram-divider::after {
+                margin-left: 12px;
+            }
+            
+            .telegram-status {
+                position: fixed;
+                top: 20px;
+                left: 50%;
+                transform: translateX(-50%);
+                background: rgba(0, 0, 0, 0.9);
+                color: white;
+                padding: 12px 20px;
+                border-radius: 10px;
+                z-index: 1000;
+                display: none;
+                max-width: 90%;
+                text-align: center;
+                font-size: 14px;
+            }
+        `;
+        document.head.appendChild(style);
     }
 
     bindEvents() {
-        console.log('🔗 Binding events');
-
-        document.getElementById('joinBtn').addEventListener('click', () => {
-            console.log('🎯 Join button clicked');
-            this.joinCall();
-        });
-
-        document.getElementById('createCallBtn').addEventListener('click', () => {
-            console.log('🎯 Create button clicked');
-            this.createCall();
-        });
-
-        document.getElementById('backBtn').addEventListener('click', () => {
-            console.log('🎯 Back button clicked');
-            this.leaveCall();
-        });
+        document.getElementById('joinBtn').addEventListener('click', () => this.joinCall());
+        document.getElementById('createCallBtn').addEventListener('click', () => this.createCall());
 
         document.getElementById('codeInput').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                console.log('🎯 Enter key pressed');
-                this.joinCall();
-            }
+            if (e.key === 'Enter') this.joinCall();
         });
 
-        // Логируем изменения значения кода
+        // Обновляем кнопку при вводе кода
         document.getElementById('codeInput').addEventListener('input', (e) => {
-            console.log('⌨️ Code input:', e.target.value);
+            this.updateButtonState(e.target.value);
         });
+    }
+
+    updateButtonState(code) {
+        const button = document.getElementById('joinBtn');
+        if (code.length === 6) {
+            button.disabled = false;
+            button.style.opacity = '1';
+        } else {
+            button.disabled = true;
+            button.style.opacity = '0.6';
+        }
     }
 
     checkUrlCode() {
         const urlParams = new URLSearchParams(window.location.search);
         const code = urlParams.get('code');
         if (code) {
-            console.log('🔗 Code from URL:', code);
             document.getElementById('codeInput').value = code;
-        }
-    }
-
-    showPage(pageId) {
-        console.log('📄 Showing page:', pageId);
-
-        document.querySelectorAll('.page').forEach(page => {
-            page.style.display = 'none';
-        });
-
-        const targetPage = document.getElementById(pageId);
-        if (targetPage) {
-            targetPage.style.display = 'flex';
-            console.log('✅ Page displayed:', pageId);
-        } else {
-            console.error('❌ Page not found:', pageId);
+            this.updateButtonState(code);
         }
     }
 
     showStatus(message, type = 'info') {
-        console.log('📢 Status:', message, type);
-
         const statusEl = document.getElementById('status');
-        if (!statusEl) {
-            console.error('❌ Status element not found');
-            return;
-        }
-
         statusEl.textContent = message;
-        statusEl.className = `status-message ${type}`;
+        statusEl.className = `telegram-status ${type}`;
         statusEl.style.display = 'block';
 
         setTimeout(() => {
@@ -109,278 +214,114 @@ class VideoCallApp {
     }
 
     async joinCall() {
-        if (this.isInitializing) {
-            console.log('⏳ Already initializing, skipping');
-            return;
-        }
+        if (this.isProcessing) return;
 
-        this.isInitializing = true;
+        this.isProcessing = true;
         const code = document.getElementById('codeInput').value.trim();
 
-        console.log('🔍 Starting join process for code:', code);
+        console.log('🔗 Joining call with code:', code);
 
         if (code.length !== 6) {
             this.showStatus('Введите 6-значный код', 'error');
-            this.isInitializing = false;
+            this.isProcessing = false;
             return;
         }
 
         this.showStatus('Проверка кода...', 'info');
 
         try {
-            // Шаг 1: Проверяем код звонка
-            console.log('📞 Step 1: Checking call info');
+            // Проверяем существование звонка
             const callInfo = await this.getCallInfo(code);
-            console.log('📊 Call info response:', callInfo);
 
             if (!callInfo.exists) {
                 this.showStatus('Звонок не найден', 'error');
-                this.isInitializing = false;
+                this.isProcessing = false;
                 return;
             }
 
-            if (!callInfo.active) {
-                this.showStatus('Звонок завершен', 'error');
-                this.isInitializing = false;
-                return;
-            }
+            // Регистрируем участие
+            await this.registerJoin(code);
 
-            // Шаг 2: Регистрируем участие
-            console.log('📝 Step 2: Registering join');
-            this.showStatus('Регистрация...', 'info');
-            const joinResult = await this.registerJoin(code);
-            console.log('✅ Join result:', joinResult);
-
-            // Шаг 3: Запускаем Jitsi
-            console.log('🎥 Step 3: Starting Jitsi');
-            this.showStatus('Загрузка видеозвонка...', 'info');
-            this.startJitsi(callInfo.room_name);
+            // Открываем Jitsi в браузере (обход ограничений Mini App)
+            this.openJitsiInBrowser(callInfo.room_name);
 
         } catch (error) {
-            console.error('❌ Join call error:', error);
-            this.showStatus('Ошибка подключения: ' + error.message, 'error');
-            this.isInitializing = false;
+            console.error('Join error:', error);
+            this.showStatus('Ошибка подключения', 'error');
+            this.isProcessing = false;
         }
     }
 
-    async getCallInfo(code) {
-        console.log('🌐 Fetching call info for code:', code);
+    // ОСНОВНОЕ ИСПРАВЛЕНИЕ: открываем Jitsi в браузере
+    openJitsiInBrowser(roomName) {
+        const jitsiUrl = `https://meet.jit.si/${roomName}`;
+        console.log('🌐 Opening Jitsi URL:', jitsiUrl);
 
-        try {
-            const response = await fetch(`/call/${code}/info`);
-            console.log('📡 Response status:', response.status);
-
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-
-            const data = await response.json();
-            console.log('📋 Call info data:', data);
-            return data;
-        } catch (error) {
-            console.error('❌ Get call info error:', error);
-            throw error;
-        }
-    }
-
-    async registerJoin(code) {
-        console.log('🌐 Registering join for code:', code);
-
-        try {
-            const response = await fetch(`/call/${code}/join`, {
-                method: 'POST'
-            });
-            console.log('📡 Join response status:', response.status);
-
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-
-            const data = await response.json();
-            console.log('✅ Join registration data:', data);
-            return data;
-        } catch (error) {
-            console.error('❌ Register join error:', error);
-            throw error;
-        }
-    }
-
-    startJitsi(roomName) {
-        console.log('🎬 Starting Jitsi for room:', roomName);
-
-        try {
-            // Очищаем контейнер
-            const container = document.getElementById('jitsiContainer');
-            container.innerHTML = '';
-            console.log('✅ Container cleared');
-
-            // Проверяем доступность Jitsi API
-            if (typeof JitsiMeetExternalAPI === 'undefined') {
-                throw new Error('Jitsi Meet API не загружен');
-            }
-            console.log('✅ Jitsi API is available');
-
-            const options = {
-                roomName: roomName,
-                width: '100%',
-                height: '100%',
-                parentNode: container,
-                configOverwrite: {
-                    prejoinPageEnabled: false, // Убираем страницу выбора
-                    startWithAudioMuted: false,
-                    startWithVideoMuted: false,
-                    disableModeratorIndicator: true,
-                    enableWelcomePage: false,
-                    enableClosePage: false
-                },
-                interfaceConfigOverwrite: {
-                    TOOLBAR_BUTTONS: [
-                        'microphone', 'camera', 'hangup', 'tileview'
-                    ],
-                    SHOW_JITSI_WATERMARK: false,
-                    SHOW_WATERMARK_FOR_GUESTS: false,
-                    SHOW_POWERED_BY: false,
-                    MOBILE_APP_PROMO: false
-                }
-            };
-
-            console.log('⚙️ Jitsi options:', options);
-
-            // Создаем экземпляр Jitsi
-            this.jitsiApi = new JitsiMeetExternalAPI('meet.jit.si', options);
-            console.log('✅ Jitsi instance created');
-
-            // Настраиваем обработчики событий
-            this.setupJitsiEvents();
-
-        } catch (error) {
-            console.error('❌ Jitsi initialization error:', error);
-            this.showStatus('Ошибка загрузки видеозвонка: ' + error.message, 'error');
-            this.isInitializing = false;
-
-            // Показываем страницу Jitsi даже при ошибке для отладки
-            this.showPage('jitsiPage');
-        }
-    }
-
-    setupJitsiEvents() {
-        console.log('🔗 Setting up Jitsi events');
-
-        this.jitsiApi.addEventListener('videoConferenceJoined', () => {
-            console.log('🎉 VIDEO CONFERENCE JOINED - Success!');
-            this.showPage('jitsiPage');
-            this.showStatus('Подключено к видеозвонку!', 'success');
-            this.isInitializing = false;
-        });
-
-        this.jitsiApi.addEventListener('videoConferenceLeft', () => {
-            console.log('👋 VIDEO CONFERENCE LEFT');
-            this.leaveCall();
-        });
-
-        this.jitsiApi.addEventListener('participantJoined', (participant) => {
-            console.log('👤 PARTICIPANT JOINED:', participant);
-        });
-
-        this.jitsiApi.addEventListener('participantLeft', (participant) => {
-            console.log('👤 PARTICIPANT LEFT:', participant);
-        });
-
-        // Обработка ошибок
-        this.jitsiApi.addEventListener('connectionFailed', () => {
-            console.error('🔌 CONNECTION FAILED');
-            this.showStatus('Ошибка подключения к серверу', 'error');
-            this.isInitializing = false;
-        });
-
-        this.jitsiApi.addEventListener('conferenceError', (error) => {
-            console.error('❌ CONFERENCE ERROR:', error);
-            this.showStatus('Ошибка конференции', 'error');
-            this.isInitializing = false;
-        });
-
-        this.jitsiApi.addEventListener('readyToClose', () => {
-            console.log('🚪 READY TO CLOSE');
-            this.leaveCall();
-        });
-
-        // Таймаут на случай если Jitsi не загрузится
-        setTimeout(() => {
-            if (this.isInitializing) {
-                console.log('⏰ Jitsi timeout - forcing page switch');
-                this.showPage('jitsiPage');
-                this.showStatus('Проверьте подключение к интернету', 'info');
-                this.isInitializing = false;
-            }
-        }, 10000);
-    }
-
-    leaveCall() {
-        console.log('🚪 Leaving call');
-
-        if (this.jitsiApi) {
-            try {
-                this.jitsiApi.dispose();
-                console.log('✅ Jitsi disposed');
-            } catch (error) {
-                console.error('❌ Error disposing Jitsi:', error);
-            }
-            this.jitsiApi = null;
-        }
-
-        // Очищаем контейнер
-        const container = document.getElementById('jitsiContainer');
-        if (container) {
-            container.innerHTML = '';
-        }
-
-        this.showPage('welcomePage');
-        this.isInitializing = false;
-        this.showStatus('Звонок завершен', 'info');
-
-        // Закрываем Mini App если это Telegram
         if (this.webApp) {
+            // В Telegram WebApp открываем ссылку в браузере
+            this.webApp.openLink(jitsiUrl);
+
+            // Показываем статус и закрываем Mini App
+            this.showStatus('Открываю видеозвонок...', 'success');
+
             setTimeout(() => {
                 this.webApp.close();
             }, 2000);
+
+        } else {
+            // В браузере открываем в новой вкладке
+            window.open(jitsiUrl, '_blank');
+            this.showStatus('Видеозвонок открыт в новой вкладке', 'success');
         }
+
+        this.isProcessing = false;
+    }
+
+    async getCallInfo(code) {
+        const response = await fetch(`/call/${code}/info`);
+        if (!response.ok) throw new Error('Network error');
+        return await response.json();
+    }
+
+    async registerJoin(code) {
+        const response = await fetch(`/call/${code}/join`, {
+            method: 'POST'
+        });
+        if (!response.ok) throw new Error('Network error');
+        return await response.json();
     }
 
     createCall() {
-        console.log('📝 Create call requested');
-        this.showStatus('Используйте команду /create в боте Telegram', 'info');
+        if (this.webApp) {
+            this.webApp.showPopup({
+                title: 'Создание звонка',
+                message: 'Для создания нового звонка используйте команду /create в чате с ботом',
+                buttons: [{ type: 'ok' }]
+            });
+        } else {
+            this.showStatus('Используйте /create в боте Telegram', 'info');
+        }
     }
 }
 
-// Глобальный обработчик ошибок
-window.addEventListener('error', (event) => {
-    console.error('🌍 Global error:', event.error);
-});
-
-// Запуск приложения
+// Инициализация приложения
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('📄 DOM loaded');
-
     try {
-        // Проверяем загрузку Jitsi API
-        if (typeof JitsiMeetExternalAPI === 'undefined') {
-            console.error('❌ Jitsi Meet API not loaded');
-            document.body.innerHTML = `
-                <div style="padding: 40px; text-align: center; color: white; background: #182533; height: 100vh; display: flex; flex-direction: column; justify-content: center;">
-                    <h2>Ошибка загрузки</h2>
-                    <p>Jitsi Meet API не загружен</p>
-                    <button onclick="location.reload()" style="margin-top: 20px; padding: 10px 20px; background: #2ea6ff; color: white; border: none; border-radius: 8px; cursor: pointer;">
-                        Обновить страницу
-                    </button>
-                </div>
-            `;
-            return;
-        }
-
-        console.log('✅ Jitsi Meet API loaded');
-        new VideoCallApp();
-
+        new TelegramCallApp();
+        console.log('✅ App started successfully');
     } catch (error) {
         console.error('❌ App initialization error:', error);
+
+        // Показываем ошибку пользователю
+        document.body.innerHTML = `
+            <div style="padding: 40px 20px; text-align: center; color: white; background: #182533; height: 100vh; display: flex; flex-direction: column; justify-content: center;">
+                <div style="font-size: 48px; margin-bottom: 20px;">😔</div>
+                <h2 style="margin-bottom: 10px; color: #fff;">Ошибка загрузки</h2>
+                <p style="color: #8ba0b2; margin-bottom: 30px;">Попробуйте обновить страницу</p>
+                <button onclick="location.reload()" style="padding: 12px 24px; background: #2ea6ff; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px;">
+                    Обновить
+                </button>
+            </div>
+        `;
     }
 });

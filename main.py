@@ -178,42 +178,20 @@ async def read_root():
 async def call_info(code: str):
     if code in calls_storage:
         call = calls_storage[code]
-
-        response = {
+        return {
             "exists": True,
             "room_name": call['room_name'],
-            "active": call['active'],
-            "participants_count": len(call['participants'])
+            "active": call['active']
         }
-        return response
-
     return {"exists": False, "active": False}
 
-
 @app.post("/call/{code}/join")
-async def join_call(code: str, request: Request):
+async def join_call(code: str):
     if code in calls_storage:
         call = calls_storage[code]
-        client_ip = request.client.host
-
-        user_id = f"user_{client_ip}_{int(time.time())}"
-
-        call['participants'].append({
-            'user_id': user_id,
-            'joined_at': datetime.now().isoformat(),
-            'ip': client_ip
-        })
-
         call['active'] = True
-
-        return {
-            "success": True,
-            "user_id": user_id,
-            "participants_count": len(call['participants'])
-        }
-
-    return {"success": False, "message": "Call not found"}
-
+        return {"success": True}
+    return {"success": False}
 
 # Webhook для Telegram
 @app.post("/webhook")
