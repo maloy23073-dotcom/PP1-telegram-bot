@@ -1,327 +1,216 @@
-// Инициализация Telegram WebApp в стиле Telegram
-function initTelegramWebApp() {
-    if (window.Telegram && window.Telegram.WebApp) {
-        const webApp = Telegram.WebApp;
+// Минимальная версия приложения
+console.log('🚀 Starting Telegram Call App');
 
-        // Настраиваем в стиле Telegram
-        webApp.expand();
-        webApp.enableClosingConfirmation();
-        webApp.setHeaderColor('#182533');
-        webApp.setBackgroundColor('#182533');
-        webApp.setBackgroundColor('#182533');
+// Проверяем загрузку Telegram WebApp
+let webApp = null;
+if (window.Telegram && window.Telegram.WebApp) {
+    webApp = Telegram.WebApp;
+    console.log('✅ Telegram WebApp detected');
 
-        // Отключаем ненужные функции
-        webApp.disableVerticalSwipes();
-        webApp.disableHorizontalSwipes();
-
-        console.log('✅ Telegram WebApp initialized');
-        return webApp;
-    }
-    return null;
+    // Базовая настройка
+    webApp.expand();
+    webApp.setHeaderColor('#182533');
+    webApp.setBackgroundColor('#182533');
+} else {
+    console.log('ℹ️ Running in browser mode');
 }
 
-// Основной класс приложения в стиле Telegram
-class TelegramCallApp {
-    constructor() {
-        this.webApp = initTelegramWebApp();
-        this.isProcessing = false;
-        this.init();
-    }
+// Основные функции
+function showStatus(message, type = 'info') {
+    console.log('Status:', message);
 
-    init() {
-        console.log('🚀 Initializing Telegram Call App');
-        this.applyTelegramStyles();
-        this.bindEvents();
-        this.checkUrlCode();
-        this.setupAppearance();
-        console.log('✅ Telegram Call App initialized');
-    }
-
-    // Применяем стили Telegram
-    applyTelegramStyles() {
-        document.documentElement.style.setProperty('--tg-theme-bg-color', '#182533');
-        document.documentElement.style.setProperty('--tg-theme-text-color', '#ffffff');
-        document.documentElement.style.setProperty('--tg-theme-hint-color', '#8ba0b2');
-        document.documentElement.style.setProperty('--tg-theme-link-color', '#2ea6ff');
-        document.documentElement.style.setProperty('--tg-theme-button-color', '#2ea6ff');
-        document.documentElement.style.setProperty('--tg-theme-button-text-color', '#ffffff');
-
-        document.body.style.background = '#182533';
-        document.body.style.color = '#ffffff';
-    }
-
-    // Настраиваем внешний вид как в Telegram
-    setupAppearance() {
-        const style = document.createElement('style');
-        style.textContent = `
-            .telegram-header {
-                background: #182533;
-                padding: 16px;
-                text-align: center;
-                border-bottom: 1px solid #2d4256;
-            }
-            
-            .telegram-title {
-                font-size: 18px;
-                font-weight: 600;
-                margin-bottom: 4px;
-                color: #ffffff;
-            }
-            
-            .telegram-subtitle {
-                font-size: 14px;
-                color: #8ba0b2;
-            }
-            
-            .telegram-card {
-                background: transparent;
-                padding: 16px;
-                margin: 0;
-            }
-            
-            .telegram-input {
-                width: 100%;
-                padding: 12px 16px;
-                background: rgba(255, 255, 255, 0.08);
-                border: 1px solid #2d4256;
-                border-radius: 10px;
-                color: #ffffff;
-                font-size: 16px;
-                text-align: center;
-                margin-bottom: 16px;
-            }
-            
-            .telegram-input:focus {
-                outline: none;
-                border-color: #2ea6ff;
-                background: rgba(255, 255, 255, 0.12);
-            }
-            
-            .telegram-button {
-                width: 100%;
-                padding: 14px 16px;
-                background: #2ea6ff;
-                color: #ffffff;
-                border: none;
-                border-radius: 10px;
-                font-size: 16px;
-                font-weight: 500;
-                cursor: pointer;
-                margin-bottom: 8px;
-                transition: background 0.2s;
-            }
-            
-            .telegram-button:hover {
-                background: #1e8dd8;
-            }
-            
-            .telegram-button:active {
-                transform: scale(0.98);
-            }
-            
-            .telegram-button-secondary {
-                background: transparent;
-                border: 1px solid #2ea6ff;
-                color: #2ea6ff;
-            }
-            
-            .telegram-divider {
-                display: flex;
-                align-items: center;
-                margin: 20px 0;
-                color: #5d7a8f;
-                font-size: 14px;
-            }
-            
-            .telegram-divider::before,
-            .telegram-divider::after {
-                content: '';
-                flex: 1;
-                height: 1px;
-                background: #2d4256;
-            }
-            
-            .telegram-divider::before {
-                margin-right: 12px;
-            }
-            
-            .telegram-divider::after {
-                margin-left: 12px;
-            }
-            
-            .telegram-status {
-                position: fixed;
-                top: 20px;
-                left: 50%;
-                transform: translateX(-50%);
-                background: rgba(0, 0, 0, 0.9);
-                color: white;
-                padding: 12px 20px;
-                border-radius: 10px;
-                z-index: 1000;
-                display: none;
-                max-width: 90%;
-                text-align: center;
-                font-size: 14px;
-            }
+    // Создаем или находим элемент статуса
+    let statusEl = document.getElementById('status');
+    if (!statusEl) {
+        statusEl = document.createElement('div');
+        statusEl.id = 'status';
+        statusEl.style.cssText = `
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.9);
+            color: white;
+            padding: 12px 20px;
+            border-radius: 10px;
+            z-index: 1000;
+            max-width: 90%;
+            text-align: center;
+            font-size: 14px;
         `;
-        document.head.appendChild(style);
+        document.body.appendChild(statusEl);
     }
 
-    bindEvents() {
-        document.getElementById('joinBtn').addEventListener('click', () => this.joinCall());
-        document.getElementById('createCallBtn').addEventListener('click', () => this.createCall());
+    statusEl.textContent = message;
+    statusEl.style.display = 'block';
 
-        document.getElementById('codeInput').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') this.joinCall();
-        });
-
-        // Обновляем кнопку при вводе кода
-        document.getElementById('codeInput').addEventListener('input', (e) => {
-            this.updateButtonState(e.target.value);
-        });
+    // Цвета в зависимости от типа
+    if (type === 'error') {
+        statusEl.style.background = 'rgba(231, 76, 60, 0.9)';
+    } else if (type === 'success') {
+        statusEl.style.background = 'rgba(39, 174, 96, 0.9)';
+    } else {
+        statusEl.style.background = 'rgba(52, 152, 219, 0.9)';
     }
 
-    updateButtonState(code) {
-        const button = document.getElementById('joinBtn');
-        if (code.length === 6) {
-            button.disabled = false;
-            button.style.opacity = '1';
-        } else {
-            button.disabled = true;
-            button.style.opacity = '0.6';
+    // Автоскрытие
+    setTimeout(() => {
+        statusEl.style.display = 'none';
+    }, 3000);
+}
+
+// Функция подключения к звонку
+async function joinCall() {
+    console.log('Join call function called');
+
+    const codeInput = document.getElementById('codeInput');
+    const code = codeInput ? codeInput.value.trim() : '';
+
+    if (!code || code.length !== 6) {
+        showStatus('Введите 6-значный код', 'error');
+        return;
+    }
+
+    showStatus('Проверка кода...', 'info');
+
+    try {
+        // Проверяем код на сервере
+        const response = await fetch(`/call/${code}/info`);
+        console.log('Response status:', response.status);
+
+        if (!response.ok) {
+            throw new Error('Ошибка сети');
         }
-    }
 
-    checkUrlCode() {
-        const urlParams = new URLSearchParams(window.location.search);
-        const code = urlParams.get('code');
-        if (code) {
-            document.getElementById('codeInput').value = code;
-            this.updateButtonState(code);
-        }
-    }
+        const callInfo = await response.json();
+        console.log('Call info:', callInfo);
 
-    showStatus(message, type = 'info') {
-        const statusEl = document.getElementById('status');
-        statusEl.textContent = message;
-        statusEl.className = `telegram-status ${type}`;
-        statusEl.style.display = 'block';
-
-        setTimeout(() => {
-            statusEl.style.display = 'none';
-        }, 3000);
-    }
-
-    async joinCall() {
-        if (this.isProcessing) return;
-
-        this.isProcessing = true;
-        const code = document.getElementById('codeInput').value.trim();
-
-        console.log('🔗 Joining call with code:', code);
-
-        if (code.length !== 6) {
-            this.showStatus('Введите 6-значный код', 'error');
-            this.isProcessing = false;
+        if (!callInfo.exists) {
+            showStatus('Звонок не найден', 'error');
             return;
         }
 
-        this.showStatus('Проверка кода...', 'info');
+        // Регистрируем участие
+        await fetch(`/call/${code}/join`, { method: 'POST' });
 
-        try {
-            // Проверяем существование звонка
-            const callInfo = await this.getCallInfo(code);
+        // Открываем Jitsi
+        openJitsiCall(callInfo.room_name);
 
-            if (!callInfo.exists) {
-                this.showStatus('Звонок не найден', 'error');
-                this.isProcessing = false;
-                return;
-            }
-
-            // Регистрируем участие
-            await this.registerJoin(code);
-
-            // Открываем Jitsi в браузере (обход ограничений Mini App)
-            this.openJitsiInBrowser(callInfo.room_name);
-
-        } catch (error) {
-            console.error('Join error:', error);
-            this.showStatus('Ошибка подключения', 'error');
-            this.isProcessing = false;
-        }
-    }
-
-    // ОСНОВНОЕ ИСПРАВЛЕНИЕ: открываем Jitsi в браузере
-    openJitsiInBrowser(roomName) {
-        const jitsiUrl = `https://meet.jit.si/${roomName}`;
-        console.log('🌐 Opening Jitsi URL:', jitsiUrl);
-
-        if (this.webApp) {
-            // В Telegram WebApp открываем ссылку в браузере
-            this.webApp.openLink(jitsiUrl);
-
-            // Показываем статус и закрываем Mini App
-            this.showStatus('Открываю видеозвонок...', 'success');
-
-            setTimeout(() => {
-                this.webApp.close();
-            }, 2000);
-
-        } else {
-            // В браузере открываем в новой вкладке
-            window.open(jitsiUrl, '_blank');
-            this.showStatus('Видеозвонок открыт в новой вкладке', 'success');
-        }
-
-        this.isProcessing = false;
-    }
-
-    async getCallInfo(code) {
-        const response = await fetch(`/call/${code}/info`);
-        if (!response.ok) throw new Error('Network error');
-        return await response.json();
-    }
-
-    async registerJoin(code) {
-        const response = await fetch(`/call/${code}/join`, {
-            method: 'POST'
-        });
-        if (!response.ok) throw new Error('Network error');
-        return await response.json();
-    }
-
-    createCall() {
-        if (this.webApp) {
-            this.webApp.showPopup({
-                title: 'Создание звонка',
-                message: 'Для создания нового звонка используйте команду /create в чате с ботом',
-                buttons: [{ type: 'ok' }]
-            });
-        } else {
-            this.showStatus('Используйте /create в боте Telegram', 'info');
-        }
+    } catch (error) {
+        console.error('Error:', error);
+        showStatus('Ошибка подключения', 'error');
     }
 }
 
-// Инициализация приложения
-document.addEventListener('DOMContentLoaded', () => {
-    try {
-        new TelegramCallApp();
-        console.log('✅ App started successfully');
-    } catch (error) {
-        console.error('❌ App initialization error:', error);
+// Функция открытия Jitsi
+function openJitsiCall(roomName) {
+    const jitsiUrl = `https://meet.jit.si/${roomName}`;
+    console.log('Opening Jitsi URL:', jitsiUrl);
 
-        // Показываем ошибку пользователю
-        document.body.innerHTML = `
-            <div style="padding: 40px 20px; text-align: center; color: white; background: #182533; height: 100vh; display: flex; flex-direction: column; justify-content: center;">
-                <div style="font-size: 48px; margin-bottom: 20px;">😔</div>
-                <h2 style="margin-bottom: 10px; color: #fff;">Ошибка загрузки</h2>
-                <p style="color: #8ba0b2; margin-bottom: 30px;">Попробуйте обновить страницу</p>
-                <button onclick="location.reload()" style="padding: 12px 24px; background: #2ea6ff; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px;">
-                    Обновить
-                </button>
-            </div>
-        `;
+    showStatus('Открываю видеозвонок...', 'success');
+
+    if (webApp) {
+        // В Telegram открываем в браузере
+        webApp.openLink(jitsiUrl);
+
+        // Закрываем Mini App через секунду
+        setTimeout(() => {
+            webApp.close();
+        }, 1000);
+    } else {
+        // В браузере открываем в новой вкладке
+        window.open(jitsiUrl, '_blank');
     }
+}
+
+// Функция создания звонка
+function createCall() {
+    if (webApp) {
+        webApp.showPopup({
+            title: 'Создание звонка',
+            message: 'Используйте команду /create в чате с ботом',
+            buttons: [{ type: 'ok' }]
+        });
+    } else {
+        showStatus('Используйте /create в боте Telegram', 'info');
+    }
+}
+
+// Инициализация при загрузке страницы
+function initializeApp() {
+    console.log('Initializing app...');
+
+    // Проверяем основные элементы
+    const codeInput = document.getElementById('codeInput');
+    const joinBtn = document.getElementById('joinBtn');
+    const createBtn = document.getElementById('createCallBtn');
+
+    if (!codeInput || !joinBtn || !createBtn) {
+        console.error('Required elements not found');
+        showErrorPage();
+        return;
+    }
+
+    // Назначаем обработчики
+    joinBtn.addEventListener('click', joinCall);
+    createBtn.addEventListener('click', createCall);
+
+    codeInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') joinCall();
+    });
+
+    // Автозаполнение кода из URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const code = urlParams.get('code');
+    if (code) {
+        codeInput.value = code;
+    }
+
+    console.log('✅ App initialized successfully');
+    showStatus('Приложение загружено', 'success');
+}
+
+// Функция показа страницы ошибки
+function showErrorPage() {
+    document.body.innerHTML = `
+        <div style="
+            padding: 40px 20px; 
+            text-align: center; 
+            color: white; 
+            background: #182533; 
+            height: 100vh; 
+            display: flex; 
+            flex-direction: column; 
+            justify-content: center; 
+            align-items: center;
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+        ">
+            <div style="font-size: 48px; margin-bottom: 20px;">📞</div>
+            <h2 style="margin-bottom: 10px; color: #fff;">Telegram Call</h2>
+            <p style="color: #8ba0b2; margin-bottom: 30px;">Произошла ошибка загрузки</p>
+            <button onclick="location.reload()" style="
+                padding: 12px 24px; 
+                background: #2ea6ff; 
+                color: white; 
+                border: none; 
+                border-radius: 8px; 
+                cursor: pointer; 
+                font-size: 16px;
+            ">
+                Обновить страницу
+            </button>
+        </div>
+    `;
+}
+
+// Запускаем приложение когда DOM загружен
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initializeApp);
+} else {
+    initializeApp();
+}
+
+// Глобальный обработчик ошибок
+window.addEventListener('error', (event) => {
+    console.error('Global error:', event.error);
 });

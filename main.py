@@ -176,6 +176,8 @@ async def read_root():
 # API endpoints
 @app.get("/call/{code}/info")
 async def call_info(code: str):
+    print(f"Call info requested: {code}")
+
     if code in calls_storage:
         call = calls_storage[code]
         return {
@@ -183,14 +185,18 @@ async def call_info(code: str):
             "room_name": call['room_name'],
             "active": call['active']
         }
+
     return {"exists": False, "active": False}
+
 
 @app.post("/call/{code}/join")
 async def join_call(code: str):
+    print(f"Join call requested: {code}")
+
     if code in calls_storage:
-        call = calls_storage[code]
-        call['active'] = True
+        calls_storage[code]['active'] = True
         return {"success": True}
+
     return {"success": False}
 
 # Webhook для Telegram
